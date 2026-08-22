@@ -96,15 +96,15 @@ export default function Dashboard() {
     if (!session?.user) return;
     setLoading(true);
     try {
-      // 1. Carrega Perfil
+      // 1. Carrega Perfil do Nutricionista
       const perfil = await getPerfilNutricionista(sql, session.user);
       setNutritionist(perfil);
 
-      // 2. Carrega Pacientes
-      const pacs = await getPacientes(sql);
+      // 2. Carrega Pacientes do Nutricionista logado em tempo real
+      const pacs = await getPacientes(sql, perfil?.id);
       setPatients(pacs || []);
 
-      // 3. Carrega Consultas
+      // 3. Carrega Consultas do Neon
       const cons = await getConsultas(sql);
       setConsultations(cons || []);
 
@@ -112,7 +112,7 @@ export default function Dashboard() {
       const plans = await getPlanosAlimentares(sql);
       setMealPlans(plans || []);
     } catch (err) {
-      console.error('Erro ao carregar dados:', err);
+      console.error('Erro ao carregar dados do Neon:', err);
       addToast('Carregando dados com cache local', 'info');
     } finally {
       setLoading(false);
@@ -159,7 +159,7 @@ export default function Dashboard() {
         await updatePaciente(sql, editingPatient.id, formData);
         addToast('Paciente atualizado com sucesso!', 'success');
       } else {
-        await createPaciente(sql, formData);
+        await createPaciente(sql, formData, nutritionist?.id);
         addToast('Paciente cadastrado com sucesso!', 'success');
       }
       setPatientModalOpen(false);
@@ -297,6 +297,94 @@ export default function Dashboard() {
       .sort((a, b) => new Date(a.proximo_retorno) - new Date(b.proximo_retorno));
   }, [consultations]);
 
+  // Card 1 — Total de pacientes ativos (Prompt 3)
+  const activePatientsCount = useMemo(() => {
+    return patients ? patients.length : 0;
+  }, [patients]);
+
+  // Card 2 — Consultas da semana atual (Prompt 3)
+  const thisWeekConsultationsCount = useMemo(() => {
+    if (!consultations || consultations.length === 0) return 0;
+
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const diffToMonday = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    
+    const monday = new Date(now);
+    monday.setDate(diffToMonday);
+    monday.setHours(0, 0, 0, 0);
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    return consultations.filter((c) => {
+      if (!c.data_consulta) return false;
+      const dateStr = typeof c.data_consulta === 'string' ? c.data_consulta.split('T')[0] : '';
+      if (!dateStr) return false;
+      const cDate = new Date(`${dateStr}T12:00:00`);
+      return cDate >= monday && cDate <= sunday;
+    }).length;
+  }, [consultations]);
+
+  // Card 3 — Pacientes sem retorno (>30 dias sem consulta e sem próximo retorno agendado) (Prompt 3)
+  const patientsWithoutReturn = useMemo(() => {
+    if (!patients || patients.length === 0) return [];
+
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const result = [];
+
+    for (const patient of patients) {
+      const pConsultations = consultations.filter((c) => c.paciente_id === patient.id);
+
+      // Se possui algum próximo retorno agendado para hoje ou no futuro, não está sem retorno
+      const hasFutureReturn = pConsultations.some((c) => {
+        return c.proximo_retorno && c.proximo_retorno >= todayStr;
+      });
+
+      if (hasFutureReturn) continue;
+
+      // Ordena consultas da mais recente para mais antiga
+      const sortedConsultations = [...pConsultations].sort(
+        (a, b) => new Date(b.data_consulta) - new Date(a.data_consulta)
+      );
+
+      const lastConsultation = sortedConsultations[0];
+
+      if (lastConsultation && lastConsultation.data_consulta) {
+        const lastDateStr = typeof lastConsultation.data_consulta === 'string'
+          ? lastConsultation.data_consulta.split('T')[0]
+          : '';
+        const lastDate = new Date(`${lastDateStr}T12:00:00`);
+        const diffDays = Math.floor((now - lastDate) / (1000 * 60 * 60 * 24));
+
+        if (diffDays > 30) {
+          result.push({
+            ...patient,
+            daysWithoutReturn: diffDays,
+            lastConsultationDateFormatted: lastDate.toLocaleDateString('pt-BR'),
+          });
+        }
+      } else {
+        // Se nunca realizou consulta, verifica se o cadastro tem mais de 30 dias
+        if (patient.created_at) {
+          const createdDate = new Date(patient.created_at);
+          const diffDays = Math.floor((now - createdDate) / (1000 * 60 * 60 * 24));
+          if (diffDays > 30) {
+            result.push({
+              ...patient,
+              daysWithoutReturn: diffDays,
+              lastConsultationDateFormatted: `Cadastrado em ${createdDate.toLocaleDateString('pt-BR')}`,
+            });
+          }
+        }
+      }
+    }
+
+    return result;
+  }, [patients, consultations]);
+
   if (authPending) {
     return (
       <div className="container">
@@ -345,165 +433,236 @@ export default function Dashboard() {
              ================================================================ */}
           {activeTab === 'overview' && (
             <div>
-              {/* Métricas Principais */}
-              <div className="metrics-grid">
-                <div className="metric-card">
+              {/* Cabeçalho do Dashboard */}
+              <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--primary-dark)', margin: 0 }}>
+                    Painel Principal
+                  </h2>
+                  <p style={{ color: 'var(--text-muted)', margin: '0.2rem 0 0 0', fontSize: '0.9rem' }}>
+                    Visão geral dos atendimentos e pacientes do nutricionista
+                  </p>
+                </div>
+                {loading && (
+                  <span className="badge badge-info" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}>
+                    🔄 Atualizando Neon...
+                  </span>
+                )}
+              </div>
+
+              {/* Cards de Informação (Cards 1 e 2 + Card Auxiliar) */}
+              <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
+                {/* Card 1 — Total de pacientes ativos */}
+                <div className="metric-card" style={{ borderLeft: '4px solid var(--primary)' }}>
                   <div className="metric-info">
-                    <span className="metric-label">Total de Pacientes</span>
-                    <span className="metric-value">{patients.length}</span>
-                    <span className="metric-subtext">Cadastrados no sistema</span>
+                    <span className="metric-label" style={{ fontWeight: 700 }}>
+                      Total de Pacientes Ativos
+                    </span>
+                    <span className="metric-value" style={{ color: 'var(--primary-dark)', fontSize: '2.2rem', fontWeight: 800, margin: '0.3rem 0' }}>
+                      {activePatientsCount}
+                    </span>
+                    <span className="metric-subtext">Cadastrados pelo nutricionista logado</span>
                   </div>
-                  <div className="metric-icon-box">👥</div>
+                  <div className="metric-icon-box">
+                    👥
+                  </div>
                 </div>
 
-                <div className="metric-card secondary">
+                {/* Card 2 — Consultas da semana */}
+                <div className="metric-card secondary" style={{ borderLeft: '4px solid var(--secondary)' }}>
                   <div className="metric-info">
-                    <span className="metric-label">Consultas Realizadas</span>
-                    <span className="metric-value">{consultations.length}</span>
-                    <span className="metric-subtext">Histórico completo</span>
+                    <span className="metric-label" style={{ fontWeight: 700 }}>
+                      Consultas da Semana
+                    </span>
+                    <span className="metric-value" style={{ color: 'var(--secondary-dark)', fontSize: '2.2rem', fontWeight: 800, margin: '0.3rem 0' }}>
+                      {thisWeekConsultationsCount}
+                    </span>
+                    <span className="metric-subtext">Registradas na semana atual</span>
                   </div>
-                  <div className="metric-icon-box secondary">📅</div>
+                  <div className="metric-icon-box secondary">
+                    📅
+                  </div>
                 </div>
 
-                <div className="metric-card orange">
+                {/* Card Auxiliar — Planos Alimentares */}
+                <div className="metric-card orange" style={{ borderLeft: '4px solid var(--accent-orange)' }}>
                   <div className="metric-info">
-                    <span className="metric-label">Planos Alimentares</span>
-                    <span className="metric-value">{mealPlans.length}</span>
-                    <span className="metric-subtext">Dietas personalizadas</span>
+                    <span className="metric-label" style={{ fontWeight: 700 }}>
+                      Planos Alimentares
+                    </span>
+                    <span className="metric-value" style={{ color: 'var(--accent-orange)', fontSize: '2.2rem', fontWeight: 800, margin: '0.3rem 0' }}>
+                      {mealPlans.length}
+                    </span>
+                    <span className="metric-subtext">Elaborados para seus pacientes</span>
                   </div>
-                  <div className="metric-icon-box orange">🥗</div>
-                </div>
-
-                <div className="metric-card info">
-                  <div className="metric-info">
-                    <span className="metric-label">Próximos Retornos</span>
-                    <span className="metric-value">{upcomingReturns.length}</span>
-                    <span className="metric-subtext">Agendados para breve</span>
+                  <div className="metric-icon-box orange">
+                    🥗
                   </div>
-                  <div className="metric-icon-box info">⏰</div>
                 </div>
               </div>
 
-              {/* Grid de 2 Colunas: Retornos & Pacientes Recentes */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem' }}>
-                {/* Coluna 1: Próximos Retornos */}
-                <div className="panel">
-                  <div className="panel-header">
-                    <div className="panel-title">
-                      <span>⏰ Próximos Retornos Agendados</span>
+              {/* Card 3 — Pacientes sem retorno */}
+              <div className="panel" style={{ borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', marginBottom: '2rem' }}>
+                <div className="panel-header" style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <span style={{ fontSize: '1.3rem' }}>⚠️</span>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                        Card 3 — Pacientes sem Retorno
+                      </h3>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        Última consulta há mais de 30 dias e que não possuem próximo retorno agendado
+                      </span>
                     </div>
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => setActiveTab('consultations')}
-                    >
-                      Ver Todas
-                    </button>
                   </div>
-                  <div className="panel-body" style={{ padding: 0 }}>
-                    {upcomingReturns.length === 0 ? (
-                      <div className="empty-state" style={{ padding: '2rem 1rem' }}>
-                        <p>Nenhum retorno agendado para os próximos dias.</p>
-                      </div>
-                    ) : (
-                      <table className="data-table">
-                        <thead>
-                          <tr>
-                            <th>Paciente</th>
-                            <th>Data do Retorno</th>
-                            <th>Ação</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {upcomingReturns.slice(0, 5).map((ret) => (
-                            <tr key={ret.id}>
-                              <td>
-                                <strong>{ret.paciente_nome || 'Paciente'}</strong>
-                              </td>
-                              <td>
-                                <span className="badge badge-info">
-                                  {new Date(ret.proximo_retorno).toLocaleDateString('pt-BR')}
-                                </span>
-                              </td>
-                              <td>
-                                <button
-                                  className="btn btn-secondary btn-sm"
-                                  onClick={() => handleOpenNewConsultation(ret.paciente_id)}
-                                >
-                                  Atender
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
+                  <span
+                    className="badge"
+                    style={{
+                      backgroundColor: patientsWithoutReturn.length > 0 ? '#fef3c7' : '#d1fae5',
+                      color: patientsWithoutReturn.length > 0 ? '#92400e' : '#065f46',
+                      padding: '0.4rem 0.85rem',
+                      borderRadius: '20px',
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                    }}
+                  >
+                    {patientsWithoutReturn.length} paciente(s)
+                  </span>
                 </div>
 
-                {/* Coluna 2: Pacientes Recentes */}
-                <div className="panel">
-                  <div className="panel-header">
-                    <div className="panel-title">
-                      <span>👤 Pacientes Recentes</span>
+                <div className="panel-body" style={{ padding: '1.25rem' }}>
+                  {patientsWithoutReturn.length === 0 ? (
+                    <div className="empty-state" style={{ padding: '2.5rem 1rem', textAlign: 'center' }}>
+                      <span style={{ fontSize: '2.2rem', display: 'block', marginBottom: '0.5rem' }}>✨</span>
+                      <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.05rem', fontWeight: 700 }}>
+                        Nenhum paciente sem retorno no momento
+                      </p>
+                      <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
+                        Todos os seus pacientes realizaram consulta recentemente ou já possuem retorno agendado!
+                      </p>
                     </div>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={handleOpenNewPatient}
-                    >
-                      ➕ Novo
-                    </button>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {patientsWithoutReturn.map((patient) => (
+                        <div
+                          key={patient.id}
+                          onClick={() => handleViewPatientDetail(patient)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '1rem 1.25rem',
+                            backgroundColor: 'var(--surface-hover)',
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid var(--border-light)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                          }}
+                          className="patient-no-return-item"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div
+                              style={{
+                                width: '42px',
+                                height: '42px',
+                                borderRadius: '50%',
+                                backgroundColor: 'var(--primary-subtle)',
+                                color: 'var(--primary-dark)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 800,
+                                fontSize: '0.95rem',
+                              }}
+                            >
+                              {patient.nome ? patient.nome.substring(0, 2).toUpperCase() : 'PN'}
+                            </div>
+                            <div>
+                              <strong style={{ fontSize: '1rem', color: 'var(--text-main)', display: 'block' }}>
+                                {patient.nome}
+                              </strong>
+                              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                Última consulta: {patient.lastConsultationDateFormatted}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                            <span
+                              style={{
+                                backgroundColor: '#fee2e2',
+                                color: '#991b1b',
+                                padding: '0.3rem 0.75rem',
+                                borderRadius: '12px',
+                                fontSize: '0.82rem',
+                                fontWeight: 700,
+                              }}
+                            >
+                              Há {patient.daysWithoutReturn} dias sem retorno
+                            </span>
+                            <span style={{ color: 'var(--primary)', fontWeight: 700, fontSize: '0.9rem' }}>
+                              Ver Perfil ➔
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Tabela Secundária: Próximos Retornos Agendados */}
+              <div className="panel" style={{ borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
+                <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 1.5rem' }}>
+                  <div className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '1.2rem' }}>📅</span>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Próximos Retornos Agendados</h3>
                   </div>
-                  <div className="panel-body" style={{ padding: 0 }}>
-                    {patients.length === 0 ? (
-                      <div className="empty-state" style={{ padding: '2rem 1rem' }}>
-                        <p>Nenhum paciente cadastrado ainda.</p>
-                      </div>
-                    ) : (
-                      <table className="data-table">
-                        <thead>
-                          <tr>
-                            <th>Paciente</th>
-                            <th>Objetivo</th>
-                            <th>Prontuário</th>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setActiveTab('consultations')}
+                  >
+                    Ver Todas as Consultas
+                  </button>
+                </div>
+                <div className="panel-body" style={{ padding: 0 }}>
+                  {upcomingReturns.length === 0 ? (
+                    <div className="empty-state" style={{ padding: '2rem 1rem', textAlign: 'center' }}>
+                      <p style={{ margin: 0, color: 'var(--text-muted)' }}>Nenhum retorno agendado para os próximos dias.</p>
+                    </div>
+                  ) : (
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Paciente</th>
+                          <th>Data do Retorno</th>
+                          <th>Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {upcomingReturns.slice(0, 5).map((ret) => (
+                          <tr key={ret.id}>
+                            <td>
+                              <strong>{ret.paciente_nome || 'Paciente'}</strong>
+                            </td>
+                            <td>
+                              <span className="badge badge-info">
+                                {new Date(ret.proximo_retorno).toLocaleDateString('pt-BR')}
+                              </span>
+                            </td>
+                            <td>
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => handleOpenNewConsultation(ret.paciente_id)}
+                              >
+                                Atender
+                              </button>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {patients.slice(0, 5).map((p) => (
-                            <tr key={p.id}>
-                              <td>
-                                <div className="table-patient-cell">
-                                  <div className="avatar-mini">
-                                    {p.nome ? p.nome[0].toUpperCase() : 'P'}
-                                  </div>
-                                  <div>
-                                    <strong>{p.nome}</strong>
-                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                      {p.whatsapp || p.email || 'Sem contato'}
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td>
-                                {p.objetivos && p.objetivos.length > 0 ? (
-                                  <span className="badge badge-primary">{p.objetivos[0]}</span>
-                                ) : (
-                                  '—'
-                                )}
-                              </td>
-                              <td>
-                                <button
-                                  className="btn btn-secondary btn-sm"
-                                  onClick={() => handleViewPatientDetail(p)}
-                                >
-                                  Ver Ficha
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
             </div>

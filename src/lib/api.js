@@ -181,14 +181,25 @@ export async function updatePerfilNutricionista(sql, user, data) {
    PACIENTES
    ========================================================================== */
 
-export async function getPacientes(sql) {
+export async function getPacientes(sql, nutricionistaId = null) {
   const local = getLocalData(STORAGE_KEYS.PACIENTES, []);
-  if (!sql) return local;
+  if (!sql) {
+    return nutricionistaId ? local.filter(p => !p.nutricionista_id || p.nutricionista_id === nutricionistaId) : local;
+  }
 
   try {
-    const rows = await sql`
-      SELECT * FROM pacientes ORDER BY created_at DESC
-    `;
+    let rows;
+    if (nutricionistaId) {
+      rows = await sql`
+        SELECT * FROM pacientes 
+        WHERE nutricionista_id = ${nutricionistaId} OR nutricionista_id IS NULL 
+        ORDER BY created_at DESC
+      `;
+    } else {
+      rows = await sql`
+        SELECT * FROM pacientes ORDER BY created_at DESC
+      `;
+    }
     if (rows) {
       setLocalData(STORAGE_KEYS.PACIENTES, rows);
       return rows;
@@ -199,12 +210,13 @@ export async function getPacientes(sql) {
   return local;
 }
 
-export async function createPaciente(sql, pacienteData) {
+export async function createPaciente(sql, pacienteData, nutricionistaId = null) {
   const id = crypto.randomUUID ? crypto.randomUUID() : `pac_${Date.now()}`;
   const now = new Date().toISOString();
 
   const newPatient = {
     id,
+    nutricionista_id: nutricionistaId,
     ...pacienteData,
     created_at: now,
   };
@@ -218,13 +230,13 @@ export async function createPaciente(sql, pacienteData) {
     try {
       const inserted = await sql`
         INSERT INTO pacientes (
-          nome, data_nascimento, sexo, whatsapp, email,
+          nutricionista_id, nome, data_nascimento, sexo, whatsapp, email,
           peso_inicial, altura, objetivos, objetivo_texto,
           nivel_atividade, patologias, restricoes_alimentares, alergias,
           medicamentos, suplementos, refeicoes_por_dia, horario_acorda,
           horario_dorme, litros_agua, atividade_fisica, atividade_fisica_descricao, observacoes
         ) VALUES (
-          ${pacienteData.nome}, ${pacienteData.data_nascimento || null}, ${pacienteData.sexo || null},
+          ${nutricionistaId || null}, ${pacienteData.nome}, ${pacienteData.data_nascimento || null}, ${pacienteData.sexo || null},
           ${pacienteData.whatsapp || null}, ${pacienteData.email || null}, ${pacienteData.peso_inicial || null},
           ${pacienteData.altura || null}, ${pacienteData.objetivos || []}, ${pacienteData.objetivo_texto || null},
           ${pacienteData.nivel_atividade || null}, ${pacienteData.patologias || []}, ${pacienteData.restricoes_alimentares || []},
