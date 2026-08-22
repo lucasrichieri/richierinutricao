@@ -1246,3 +1246,27 @@ select.form-control {
     font-size: 1.8rem !important;
   }
 }
+
+/* ==========================================================================
+   PWA INSTALL BANNER STYLES
+   ========================================================================== */
+.pwa-install-banner {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #1E1B4B, #4338CA);
+  color: white;
+  padding: 0.85rem 1.25rem;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  z-index: 9999;
+  max-width: 92vw;
+  width: 480px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
