@@ -22,6 +22,7 @@ import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import Toast from '../components/Toast';
 import PatientModal from '../components/PatientModal';
+import PatientForm from '../components/PatientForm';
 import PatientDetailModal from '../components/PatientDetailModal';
 import ConsultationModal from '../components/ConsultationModal';
 import MealPlanModal from '../components/MealPlanModal';
@@ -145,7 +146,7 @@ export default function Dashboard() {
      ========================================================================== */
   const handleOpenNewPatient = () => {
     setEditingPatient(null);
-    setPatientModalOpen(true);
+    setActiveTab('new_patient');
   };
 
   const handleEditPatient = (patient) => {
@@ -155,16 +156,27 @@ export default function Dashboard() {
 
   const handleSavePatient = async (formData) => {
     try {
+      let savedPatient;
       if (editingPatient) {
-        await updatePaciente(sql, editingPatient.id, formData);
+        savedPatient = await updatePaciente(sql, editingPatient.id, formData);
         addToast('Paciente atualizado com sucesso!', 'success');
+        setPatientModalOpen(false);
       } else {
-        await createPaciente(sql, formData, nutritionist?.id);
+        savedPatient = await createPaciente(sql, formData, nutritionist?.id);
         addToast('Paciente cadastrado com sucesso!', 'success');
+        setPatientModalOpen(false);
       }
-      setPatientModalOpen(false);
-      loadData();
+
+      await loadData();
+
+      // Prompt 4: Após salvar, redirecionar para o perfil do paciente recém cadastrado
+      if (savedPatient) {
+        handleViewPatientDetail(savedPatient);
+      } else {
+        setActiveTab('patients');
+      }
     } catch (err) {
+      console.error('Erro ao salvar paciente:', err);
       addToast('Erro ao salvar paciente', 'error');
     }
   };
@@ -268,6 +280,45 @@ export default function Dashboard() {
         (p.objetivos && p.objetivos.some((o) => o.toLowerCase().includes(q)))
     );
   }, [patients, patientSearch]);
+
+  // Lista com detalhamento da última consulta e objetivos (Prompt 4)
+  const patientListWithDetails = useMemo(() => {
+    if (!filteredPatients) return [];
+    return filteredPatients.map((patient) => {
+      const pConsultations = consultations.filter((c) => c.paciente_id === patient.id);
+      let lastConsultationText = 'Sem consultas registradas';
+      let lastConsultationDate = null;
+
+      if (pConsultations.length > 0) {
+        const sorted = [...pConsultations].sort(
+          (a, b) => new Date(b.data_consulta) - new Date(a.data_consulta)
+        );
+        const last = sorted[0];
+        if (last && last.data_consulta) {
+          const dateStr = typeof last.data_consulta === 'string' ? last.data_consulta.split('T')[0] : '';
+          if (dateStr) {
+            const d = new Date(`${dateStr}T12:00:00`);
+            lastConsultationDate = d;
+            lastConsultationText = d.toLocaleDateString('pt-BR');
+          }
+        }
+      }
+
+      let mainObjetivo = 'Não informado';
+      if (patient.objetivos && patient.objetivos.length > 0) {
+        mainObjetivo = patient.objetivos.join(', ');
+      } else if (patient.objetivo_texto) {
+        mainObjetivo = patient.objetivo_texto;
+      }
+
+      return {
+        ...patient,
+        lastConsultationText,
+        lastConsultationDate,
+        mainObjetivo,
+      };
+    });
+  }, [filteredPatients, consultations]);
 
   const filteredConsultations = useMemo(() => {
     if (!consultationSearch.trim()) return consultations;
@@ -669,39 +720,41 @@ export default function Dashboard() {
           )}
 
           {/* ================================================================
-             ABA 2: GESTÃO DE PACIENTES
+             ABA 2: GESTÃO DE PACIENTES (PROMPT 4)
              ================================================================ */}
           {activeTab === 'patients' && (
-            <div className="panel">
-              <div className="panel-header">
+            <div className="panel" style={{ borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
+              <div className="panel-header" style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-light)' }}>
                 <div className="filter-bar" style={{ margin: 0, width: '100%' }}>
-                  <div className="search-input-wrapper">
+                  <div className="search-input-wrapper" style={{ flex: 1 }}>
                     <span className="search-icon">🔍</span>
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="Buscar por nome, e-mail, telefone ou objetivo..."
+                      placeholder="Buscar paciente por nome..."
                       value={patientSearch}
                       onChange={(e) => setPatientSearch(e.target.value)}
                     />
                   </div>
-                  <button className="btn btn-primary" onClick={handleOpenNewPatient}>
-                    ➕ Cadastrar Paciente
+                  <button className="btn btn-primary" onClick={handleOpenNewPatient} style={{ fontWeight: 800 }}>
+                    ➕ Novo Paciente
                   </button>
                 </div>
               </div>
 
               <div className="panel-body" style={{ padding: 0 }}>
-                {filteredPatients.length === 0 ? (
-                  <div className="empty-state">
+                {patientListWithDetails.length === 0 ? (
+                  <div className="empty-state" style={{ padding: '3.5rem 1.5rem', textAlign: 'center' }}>
                     <div className="empty-icon">👥</div>
-                    <h3>Nenhum paciente encontrado</h3>
-                    <p>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
+                      Nenhum paciente cadastrado ainda
+                    </h3>
+                    <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
                       {patientSearch
-                        ? 'Nenhum paciente corresponde aos critérios de busca.'
-                        : 'Comece adicionando seus pacientes para gerenciar consultas e dietas.'}
+                        ? 'Nenhum paciente encontrado para os termos da busca.'
+                        : 'Comece adicionando seus pacientes para gerenciar consultas e planos alimentares.'}
                     </p>
-                    <button className="btn btn-primary" onClick={handleOpenNewPatient}>
+                    <button className="btn btn-primary" onClick={handleOpenNewPatient} style={{ fontWeight: 800 }}>
                       ➕ Cadastrar Primeiro Paciente
                     </button>
                   </div>
@@ -711,83 +764,55 @@ export default function Dashboard() {
                       <thead>
                         <tr>
                           <th>Nome do Paciente</th>
-                          <th>Contato</th>
-                          <th>Peso / Altura</th>
-                          <th>Objetivos</th>
-                          <th>Nível de Atividade</th>
+                          <th>Objetivo</th>
+                          <th>Data da Última Consulta</th>
                           <th style={{ textAlign: 'right' }}>Ações</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredPatients.map((patient) => (
-                          <tr key={patient.id}>
-                            <td>
+                        {patientListWithDetails.map((patient) => (
+                          <tr key={patient.id} style={{ cursor: 'pointer' }}>
+                            <td onClick={() => handleViewPatientDetail(patient)}>
                               <div className="table-patient-cell">
                                 <div className="avatar-mini">
                                   {patient.nome ? patient.nome[0].toUpperCase() : 'P'}
                                 </div>
                                 <div>
-                                  <strong
-                                    style={{ cursor: 'pointer', color: 'var(--primary-dark)' }}
-                                    onClick={() => handleViewPatientDetail(patient)}
-                                  >
+                                  <strong style={{ color: 'var(--primary-dark)', fontSize: '0.98rem' }}>
                                     {patient.nome}
                                   </strong>
-                                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                    {patient.sexo || 'Sexo não informado'}
+                                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                                    {patient.whatsapp || patient.email || 'Sem contato registrado'}
                                   </div>
                                 </div>
                               </div>
                             </td>
-                            <td>
-                              <div style={{ fontSize: '0.85rem' }}>
-                                {patient.whatsapp && <div>📱 {patient.whatsapp}</div>}
-                                {patient.email && <div style={{ color: 'var(--text-muted)' }}>✉️ {patient.email}</div>}
-                                {!patient.whatsapp && !patient.email && '—'}
-                              </div>
-                            </td>
-                            <td>
-                              <div style={{ fontSize: '0.85rem' }}>
-                                <strong>{patient.peso_inicial ? `${patient.peso_inicial} kg` : '—'}</strong>
-                                {patient.altura && (
-                                  <span style={{ color: 'var(--text-muted)' }}>
-                                    {' '}/ {patient.altura} m
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td>
-                              {patient.objetivos && patient.objetivos.length > 0 ? (
-                                <div className="tag-list">
-                                  {patient.objetivos.slice(0, 2).map((obj, i) => (
-                                    <span key={i} className="badge badge-primary">{obj}</span>
-                                  ))}
-                                  {patient.objetivos.length > 2 && (
-                                    <span className="badge badge-neutral">+{patient.objetivos.length - 2}</span>
-                                  )}
-                                </div>
-                              ) : (
-                                '—'
-                              )}
-                            </td>
-                            <td>
-                              <span className="badge badge-neutral">
-                                {patient.nivel_atividade || 'Moderado'}
+                            <td onClick={() => handleViewPatientDetail(patient)}>
+                              <span className="badge badge-primary" style={{ fontWeight: 700 }}>
+                                {patient.mainObjetivo}
                               </span>
                             </td>
-                            <td style={{ textAlign: 'right' }}>
+                            <td onClick={() => handleViewPatientDetail(patient)}>
+                              <span
+                                className={`badge ${patient.lastConsultationDate ? 'badge-info' : 'badge-neutral'}`}
+                                style={{ fontWeight: 600 }}
+                              >
+                                {patient.lastConsultationText}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                               <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
                                 <button
                                   className="btn btn-secondary btn-sm"
                                   onClick={() => handleViewPatientDetail(patient)}
-                                  title="Ver Prontuário"
+                                  title="Ver Perfil / Ficha Completa"
                                 >
-                                  📋 Prontuário
+                                  👁️ Perfil
                                 </button>
                                 <button
                                   className="btn btn-secondary btn-sm btn-icon"
                                   onClick={() => handleEditPatient(patient)}
-                                  title="Editar"
+                                  title="Editar Paciente"
                                 >
                                   ✏️
                                 </button>
@@ -798,7 +823,7 @@ export default function Dashboard() {
                                       handleDeletePatient(patient.id);
                                     }
                                   }}
-                                  title="Excluir"
+                                  title="Excluir Paciente"
                                 >
                                   🗑️
                                 </button>
@@ -812,6 +837,16 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
+          )}
+
+          {/* ================================================================
+             ABA 2.1: FORMULÁRIO DE NOVO PACIENTES (PROMPT 4 - PÁGINA NOVA)
+             ================================================================ */}
+          {activeTab === 'new_patient' && (
+            <PatientForm
+              onSave={handleSavePatient}
+              onCancel={() => setActiveTab('patients')}
+            />
           )}
 
           {/* ================================================================
