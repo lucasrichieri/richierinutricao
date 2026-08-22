@@ -31,8 +31,8 @@ export default function Header({
         <button
           className="btn btn-secondary btn-icon"
           onClick={() => setMobileOpen(!mobileOpen)}
-          style={{ display: 'none' }}
           id="mobile-menu-toggle"
+          title="Abrir Menu"
         >
           ☰
         </button>
