@@ -2,7 +2,7 @@ import { neon } from '@neondatabase/serverless';
 
 /**
  * Cria o cliente de conexão Neon autenticado
- * @param {string} jwtToken Token JWT do Neon Auth
+ * @param {string} jwtToken Token JWT do Neon Auth (opcional)
  * @returns {Function} Função SQL do Neon
  */
 export function getDb(jwtToken) {
@@ -14,8 +14,9 @@ export function getDb(jwtToken) {
 
   try {
     let connectionString = baseUrl;
-    if (jwtToken) {
-      connectionString = baseUrl.replace('authenticated', `authenticated:${jwtToken}`);
+    // Se um token JWT válido (formato JWT: ey...) for fornecido, conecta via role 'authenticated'
+    if (typeof jwtToken === 'string' && jwtToken.startsWith('ey') && jwtToken.includes('.')) {
+      connectionString = baseUrl.replace(/postgres:\/\/[^@]+@/, `postgres://authenticated:${jwtToken}@`);
     }
     return neon(connectionString);
   } catch (error) {

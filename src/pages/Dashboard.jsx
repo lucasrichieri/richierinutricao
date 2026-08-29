@@ -74,18 +74,18 @@ export default function Dashboard() {
     async function fetchJwt() {
       if (session?.user) {
         try {
-          // Tenta obter o token JWT do Neon Auth através do plugin jwtClient do better-auth
-          const res = await authClient.token?.();
-          if (isMounted && res?.data?.token) {
-            setJwtToken(res.data.token);
+          // Obter token JWT do Neon Auth chamando a rota /token via $fetch
+          const res = await authClient.$fetch('/token', { method: 'GET' });
+          const tokenStr = res?.data?.token || res?.token;
+          if (isMounted && tokenStr) {
+            setJwtToken(tokenStr);
             return;
           }
         } catch (err) {
-          console.warn('Obtendo token de sessão fallback:', err);
+          console.warn('Conectando via fallback autenticado ao Neon DB:', err);
         }
         if (isMounted) {
-          const fallbackToken = session?.session?.token || session?.token;
-          setJwtToken(fallbackToken);
+          setJwtToken(null);
         }
       } else {
         if (isMounted) setJwtToken(null);
