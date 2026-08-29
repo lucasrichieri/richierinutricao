@@ -128,18 +128,20 @@ export async function getPerfilNutricionista(sql, user) {
   }
 
   try {
+    // Buscar por ID ou email
     const rows = await sql`
-      SELECT * FROM nutricionistas WHERE email = ${user.email} LIMIT 1
+      SELECT * FROM nutricionistas WHERE id = ${user.id} OR email = ${user.email} LIMIT 1
     `;
     if (rows && rows.length > 0) {
       const perfil = rows[0];
       setLocalData(STORAGE_KEYS.PERFIL, perfil);
       return perfil;
     } else {
-      // Cria registro se não existir garantindo id = user.id para RLS
+      // Cria registro se não existir, usando ON CONFLICT para evitar duplicatas
       const inserted = await sql`
-        INSERT INTO nutricionistas (id, nome, email, crn, telefone)
-        VALUES (${user.id}, ${user.name || 'Nutricionista'}, ${user.email}, 'CRN-3 12345/P', '(11) 99999-8888')
+        INSERT INTO nutricionistas (id, nome, email)
+        VALUES (${user.id}, ${user.name || 'Nutricionista'}, ${user.email})
+        ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome, email = EXCLUDED.email
         RETURNING *
       `;
       if (inserted && inserted.length > 0) {
