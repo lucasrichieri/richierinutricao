@@ -19,6 +19,8 @@ export default function ConsultationModal({
     proximo_retorno: '',
   });
 
+  const [submitting, setSubmitting] = useState(false);
+
   useEffect(() => {
     if (consultationToEdit) {
       setFormData({
@@ -51,7 +53,7 @@ export default function ConsultationModal({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.paciente_id) {
       alert('Selecione um paciente.');
@@ -61,7 +63,12 @@ export default function ConsultationModal({
       alert('Informe a data da consulta.');
       return;
     }
-    onSave(formData);
+    setSubmitting(true);
+    try {
+      await onSave(formData);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const selectedPatient = patients.find((p) => p.id === formData.paciente_id);
@@ -210,11 +217,11 @@ export default function ConsultationModal({
           </div>
 
           <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={submitting}>
               Cancelar
             </button>
-            <button type="submit" className="btn btn-primary">
-              💾 Salvar Consulta
+            <button type="submit" className="btn btn-primary" disabled={submitting}>
+              {submitting ? 'Salvando...' : '💾 Salvar Consulta'}
             </button>
           </div>
         </form>
