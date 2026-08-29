@@ -13,6 +13,7 @@ import {
   syncLocalPacientesToNeon,
   getConsultas,
   createConsulta,
+  updateConsulta,
   deleteConsulta,
   getPlanosAlimentares,
   createPlanoAlimentar,
@@ -24,6 +25,7 @@ import Header from '../components/Header';
 import Toast from '../components/Toast';
 import PatientModal from '../components/PatientModal';
 import PatientForm from '../components/PatientForm';
+import PatientProfileView from '../components/PatientProfileView';
 import PatientDetailModal from '../components/PatientDetailModal';
 import ConsultationModal from '../components/ConsultationModal';
 import MealPlanModal from '../components/MealPlanModal';
@@ -229,7 +231,19 @@ export default function Dashboard() {
 
   const handleViewPatientDetail = (patient) => {
     setSelectedPatientForDetail(patient);
-    setDetailModalOpen(true);
+    setActiveTab('patient_profile');
+  };
+
+  const handleSavePatientFromProfile = async (formData) => {
+    try {
+      const saved = await updatePaciente(sql, selectedPatientForDetail.id, formData);
+      addToast('Dados do paciente atualizados com sucesso no Neon DB!', 'success');
+      setSelectedPatientForDetail(saved);
+      await loadData();
+    } catch (err) {
+      console.error('Erro ao atualizar paciente:', err);
+      addToast('Erro ao atualizar paciente', 'error');
+    }
   };
 
   /* ==========================================================================
@@ -241,14 +255,27 @@ export default function Dashboard() {
     setConsultationModalOpen(true);
   };
 
+  const handleEditConsultation = (consultation) => {
+    setEditingConsultation(consultation);
+    setPreselectedPatientId(consultation.paciente_id);
+    setConsultationModalOpen(true);
+  };
+
   const handleSaveConsultation = async (formData) => {
     try {
-      await createConsulta(sql, formData);
-      addToast('Consulta registrada com sucesso!', 'success');
+      if (editingConsultation) {
+        await updateConsulta(sql, editingConsultation.id, formData);
+        addToast('Consulta atualizada com sucesso no Neon DB!', 'success');
+      } else {
+        await createConsulta(sql, formData);
+        addToast('Consulta registrada com sucesso no Neon DB!', 'success');
+      }
       setConsultationModalOpen(false);
-      loadData();
+      setEditingConsultation(null);
+      await loadData();
     } catch (err) {
-      addToast('Erro ao registrar consulta', 'error');
+      console.error('Erro ao salvar consulta:', err);
+      addToast('Erro ao salvar consulta', 'error');
     }
   };
 
@@ -257,7 +284,7 @@ export default function Dashboard() {
       try {
         await deleteConsulta(sql, id);
         addToast('Consulta excluída com sucesso!', 'success');
-        loadData();
+        await loadData();
       } catch (err) {
         addToast('Erro ao excluir consulta', 'error');
       }
@@ -882,6 +909,28 @@ export default function Dashboard() {
             <PatientForm
               onSave={handleSavePatient}
               onCancel={() => setActiveTab('patients')}
+            />
+          )}
+
+          {/* ================================================================
+             ABA 2.2: PERFIL DO PACIENTE (PROMPT 5 — PÁGINA DE PERFIL + CONSULTAS)
+             ================================================================ */}
+          {activeTab === 'patient_profile' && selectedPatientForDetail && (
+            <PatientProfileView
+              patient={selectedPatientForDetail}
+              consultations={consultations}
+              mealPlans={mealPlans}
+              onBack={() => setActiveTab('patients')}
+              onSavePatient={handleSavePatientFromProfile}
+              onDeletePatient={(p) => {
+                handleDeletePatient(p);
+                setActiveTab('patients');
+              }}
+              onOpenNewConsultation={(patientId) => handleOpenNewConsultation(patientId)}
+              onEditConsultation={(c) => handleEditConsultation(c)}
+              onDeleteConsultation={(id) => handleDeleteConsultation(id)}
+              onOpenNewMealPlan={(patientId) => handleOpenNewMealPlan(patientId)}
+              onViewMealPlan={(plan) => handleViewMealPlan(plan)}
             />
           )}
 

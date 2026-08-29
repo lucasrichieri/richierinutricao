@@ -531,9 +531,24 @@ export async function createConsulta(sql, consultaData) {
   const id = crypto.randomUUID ? crypto.randomUUID() : `cons_${Date.now()}`;
   const now = new Date().toISOString();
 
+  const peso = consultaData.peso && !isNaN(parseFloat(consultaData.peso)) ? parseFloat(consultaData.peso) : null;
+  const cintura = consultaData.cintura && !isNaN(parseFloat(consultaData.cintura)) ? parseFloat(consultaData.cintura) : null;
+  const quadril = consultaData.quadril && !isNaN(parseFloat(consultaData.quadril)) ? parseFloat(consultaData.quadril) : null;
+  const gordura = consultaData.percentual_gordura && !isNaN(parseFloat(consultaData.percentual_gordura)) ? parseFloat(consultaData.percentual_gordura) : null;
+  const proxRetorno = consultaData.proximo_retorno || null;
+  const obs = consultaData.observacoes || null;
+  const dataConsulta = consultaData.data_consulta || new Date().toISOString().split('T')[0];
+
   const newConsulta = {
     id,
-    ...consultaData,
+    paciente_id: consultaData.paciente_id,
+    data_consulta: dataConsulta,
+    peso,
+    cintura,
+    quadril,
+    percentual_gordura: gordura,
+    observacoes: obs,
+    proximo_retorno: proxRetorno,
     created_at: now,
   };
 
@@ -548,9 +563,9 @@ export async function createConsulta(sql, consultaData) {
           paciente_id, data_consulta, peso, cintura, quadril,
           percentual_gordura, observacoes, proximo_retorno
         ) VALUES (
-          ${consultaData.paciente_id}, ${consultaData.data_consulta}, ${consultaData.peso || null},
-          ${consultaData.cintura || null}, ${consultaData.quadril || null}, ${consultaData.percentual_gordura || null},
-          ${consultaData.observacoes || null}, ${consultaData.proximo_retorno || null}
+          ${consultaData.paciente_id}::uuid, ${dataConsulta}, ${peso},
+          ${cintura}, ${quadril}, ${gordura},
+          ${obs}, ${proxRetorno}
         ) RETURNING *
       `;
       if (inserted && inserted[0]) {
@@ -567,13 +582,63 @@ export async function createConsulta(sql, consultaData) {
   return newConsulta;
 }
 
+export async function updateConsulta(sql, consultaId, consultaData) {
+  const peso = consultaData.peso && !isNaN(parseFloat(consultaData.peso)) ? parseFloat(consultaData.peso) : null;
+  const cintura = consultaData.cintura && !isNaN(parseFloat(consultaData.cintura)) ? parseFloat(consultaData.cintura) : null;
+  const quadril = consultaData.quadril && !isNaN(parseFloat(consultaData.quadril)) ? parseFloat(consultaData.quadril) : null;
+  const gordura = consultaData.percentual_gordura && !isNaN(parseFloat(consultaData.percentual_gordura)) ? parseFloat(consultaData.percentual_gordura) : null;
+  const proxRetorno = consultaData.proximo_retorno || null;
+  const obs = consultaData.observacoes || null;
+  const dataConsulta = consultaData.data_consulta || new Date().toISOString().split('T')[0];
+
+  let updatedRecord = {
+    id: consultaId,
+    ...consultaData,
+    peso,
+    cintura,
+    quadril,
+    percentual_gordura: gordura,
+    proximo_retorno: proxRetorno,
+    observacoes: obs,
+    data_consulta: dataConsulta,
+  };
+
+  if (sql) {
+    try {
+      const res = await sql`
+        UPDATE consultas SET
+          data_consulta = ${dataConsulta},
+          peso = ${peso},
+          cintura = ${cintura},
+          quadril = ${quadril},
+          percentual_gordura = ${gordura},
+          observacoes = ${obs},
+          proximo_retorno = ${proxRetorno}
+        WHERE id = ${consultaId}::uuid
+        RETURNING *
+      `;
+      if (res && res[0]) {
+        updatedRecord = res[0];
+      }
+    } catch (err) {
+      console.error('Erro ao atualizar consulta no Neon DB:', err);
+    }
+  }
+
+  const current = getLocalData(STORAGE_KEYS.CONSULTAS, []);
+  const updated = current.map(c => (c.id === consultaId ? updatedRecord : c));
+  setLocalData(STORAGE_KEYS.CONSULTAS, updated);
+
+  return updatedRecord;
+}
+
 export async function deleteConsulta(sql, consultaId) {
   const current = getLocalData(STORAGE_KEYS.CONSULTAS, []);
   setLocalData(STORAGE_KEYS.CONSULTAS, current.filter(c => c.id !== consultaId));
 
   if (sql) {
     try {
-      await sql`DELETE FROM consultas WHERE id = ${consultaId}`;
+      await sql`DELETE FROM consultas WHERE id = ${consultaId}::uuid`;
     } catch (err) {
       console.warn('Erro ao excluir consulta no Neon:', err.message);
     }

@@ -14,6 +14,10 @@ export default function Header({
         return 'Visão Geral do Consultório';
       case 'patients':
         return 'Gestão de Pacientes';
+      case 'patient_profile':
+        return 'Prontuário & Perfil do Paciente';
+      case 'new_patient':
+        return 'Cadastro de Paciente';
       case 'consultations':
         return 'Consultas & Retornos';
       case 'meal_plans':
