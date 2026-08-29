@@ -66,11 +66,39 @@ export default function Dashboard() {
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [selectedPlanForPrint, setSelectedPlanForPrint] = useState(null);
 
+  // Estado para armazenar o token JWT do Neon Auth
+  const [jwtToken, setJwtToken] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchJwt() {
+      if (session?.user) {
+        try {
+          // Tenta obter o token JWT do Neon Auth através do plugin jwtClient do better-auth
+          const res = await authClient.token?.();
+          if (isMounted && res?.data?.token) {
+            setJwtToken(res.data.token);
+            return;
+          }
+        } catch (err) {
+          console.warn('Obtendo token de sessão fallback:', err);
+        }
+        if (isMounted) {
+          const fallbackToken = session?.session?.token || session?.token;
+          setJwtToken(fallbackToken);
+        }
+      } else {
+        if (isMounted) setJwtToken(null);
+      }
+    }
+    fetchJwt();
+    return () => { isMounted = false; };
+  }, [session]);
+
   // Instância do banco Neon
   const sql = useMemo(() => {
-    const token = session?.session?.token || session?.token;
-    return getDb(token);
-  }, [session]);
+    return getDb(jwtToken);
+  }, [jwtToken]);
 
   // Adiciona notificação toast
   const addToast = (message, type = 'success') => {
@@ -102,7 +130,8 @@ export default function Dashboard() {
       setNutritionist(perfil);
 
       // 2. Carrega Pacientes do Nutricionista logado em tempo real
-      const pacs = await getPacientes(sql, perfil?.id);
+      const nutId = perfil?.id || session.user.id;
+      const pacs = await getPacientes(sql, nutId);
       setPatients(pacs || []);
 
       // 3. Carrega Consultas do Neon
@@ -157,12 +186,13 @@ export default function Dashboard() {
   const handleSavePatient = async (formData) => {
     try {
       let savedPatient;
+      const nutId = nutritionist?.id || session?.user?.id;
       if (editingPatient) {
         savedPatient = await updatePaciente(sql, editingPatient.id, formData);
         addToast('Paciente atualizado com sucesso!', 'success');
         setPatientModalOpen(false);
       } else {
-        savedPatient = await createPaciente(sql, formData, nutritionist?.id);
+        savedPatient = await createPaciente(sql, formData, nutId);
         addToast('Paciente cadastrado com sucesso!', 'success');
         setPatientModalOpen(false);
       }
