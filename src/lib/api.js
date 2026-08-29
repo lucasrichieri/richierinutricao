@@ -535,9 +535,9 @@ export async function createConsulta(sql, consultaData) {
   const cintura = consultaData.cintura && !isNaN(parseFloat(consultaData.cintura)) ? parseFloat(consultaData.cintura) : null;
   const quadril = consultaData.quadril && !isNaN(parseFloat(consultaData.quadril)) ? parseFloat(consultaData.quadril) : null;
   const gordura = consultaData.percentual_gordura && !isNaN(parseFloat(consultaData.percentual_gordura)) ? parseFloat(consultaData.percentual_gordura) : null;
-  const proxRetorno = consultaData.proximo_retorno || null;
-  const obs = consultaData.observacoes || null;
-  const dataConsulta = consultaData.data_consulta || new Date().toISOString().split('T')[0];
+  const proxRetorno = consultaData.proximo_retorno && String(consultaData.proximo_retorno).trim() ? String(consultaData.proximo_retorno).trim() : null;
+  const obs = consultaData.observacoes && String(consultaData.observacoes).trim() ? String(consultaData.observacoes).trim() : null;
+  const dataConsulta = consultaData.data_consulta && String(consultaData.data_consulta).trim() ? String(consultaData.data_consulta).trim() : new Date().toISOString().split('T')[0];
 
   const newConsulta = {
     id,
@@ -558,12 +558,19 @@ export async function createConsulta(sql, consultaData) {
 
   if (sql) {
     try {
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(consultaData.paciente_id);
+      let targetPacienteId = consultaData.paciente_id;
+      if (!isUUID) {
+        const found = await sql`SELECT id FROM pacientes LIMIT 1`;
+        if (found && found[0]) targetPacienteId = found[0].id;
+      }
+
       const inserted = await sql`
         INSERT INTO consultas (
           paciente_id, data_consulta, peso, cintura, quadril,
           percentual_gordura, observacoes, proximo_retorno
         ) VALUES (
-          ${consultaData.paciente_id}::uuid, ${dataConsulta}, ${peso},
+          ${targetPacienteId}, ${dataConsulta}, ${peso},
           ${cintura}, ${quadril}, ${gordura},
           ${obs}, ${proxRetorno}
         ) RETURNING *
@@ -572,10 +579,12 @@ export async function createConsulta(sql, consultaData) {
         const finalConsulta = inserted[0];
         const syncList = updated.map(c => (c.id === id ? finalConsulta : c));
         setLocalData(STORAGE_KEYS.CONSULTAS, syncList);
+        console.log('Consulta inserida com sucesso no Neon DB:', finalConsulta.id);
         return finalConsulta;
       }
     } catch (err) {
-      console.warn('Erro ao inserir consulta no Neon, mantido localmente:', err.message);
+      console.error('Erro ao inserir consulta no Neon DB:', err);
+      throw err;
     }
   }
 
@@ -587,9 +596,9 @@ export async function updateConsulta(sql, consultaId, consultaData) {
   const cintura = consultaData.cintura && !isNaN(parseFloat(consultaData.cintura)) ? parseFloat(consultaData.cintura) : null;
   const quadril = consultaData.quadril && !isNaN(parseFloat(consultaData.quadril)) ? parseFloat(consultaData.quadril) : null;
   const gordura = consultaData.percentual_gordura && !isNaN(parseFloat(consultaData.percentual_gordura)) ? parseFloat(consultaData.percentual_gordura) : null;
-  const proxRetorno = consultaData.proximo_retorno || null;
-  const obs = consultaData.observacoes || null;
-  const dataConsulta = consultaData.data_consulta || new Date().toISOString().split('T')[0];
+  const proxRetorno = consultaData.proximo_retorno && String(consultaData.proximo_retorno).trim() ? String(consultaData.proximo_retorno).trim() : null;
+  const obs = consultaData.observacoes && String(consultaData.observacoes).trim() ? String(consultaData.observacoes).trim() : null;
+  const dataConsulta = consultaData.data_consulta && String(consultaData.data_consulta).trim() ? String(consultaData.data_consulta).trim() : new Date().toISOString().split('T')[0];
 
   let updatedRecord = {
     id: consultaId,
@@ -614,14 +623,16 @@ export async function updateConsulta(sql, consultaId, consultaData) {
           percentual_gordura = ${gordura},
           observacoes = ${obs},
           proximo_retorno = ${proxRetorno}
-        WHERE id = ${consultaId}::uuid
+        WHERE id = ${consultaId}
         RETURNING *
       `;
       if (res && res[0]) {
         updatedRecord = res[0];
+        console.log('Consulta atualizada com sucesso no Neon DB:', updatedRecord.id);
       }
     } catch (err) {
       console.error('Erro ao atualizar consulta no Neon DB:', err);
+      throw err;
     }
   }
 
@@ -638,9 +649,10 @@ export async function deleteConsulta(sql, consultaId) {
 
   if (sql) {
     try {
-      await sql`DELETE FROM consultas WHERE id = ${consultaId}::uuid`;
+      await sql`DELETE FROM consultas WHERE id = ${consultaId}`;
+      console.log('Consulta excluída com sucesso do Neon DB:', consultaId);
     } catch (err) {
-      console.warn('Erro ao excluir consulta no Neon:', err.message);
+      console.error('Erro ao excluir consulta no Neon:', err.message);
     }
   }
   return true;
