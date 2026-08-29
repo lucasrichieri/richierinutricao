@@ -234,6 +234,19 @@ export default function PatientForm({ onSave, onCancel, patientToEdit = null }) 
     return `${imc.toFixed(1)} kg/m² (${classif})`;
   };
 
+  // Cálculo de Consumo Diário de Água: Peso (kg) × 35 ml
+  const calculateWater = () => {
+    const p = parseFloat(formData.peso_inicial);
+    if (!p || p <= 0 || isNaN(p)) return null;
+    const ml = Math.round(p * 35);
+    const litros = Number((ml / 1000).toFixed(2));
+    return {
+      ml,
+      litros,
+      formula: `${p} kg × 35 ml = ${ml.toLocaleString('pt-BR')} ml (${litros} L)`,
+    };
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
 
@@ -271,6 +284,7 @@ export default function PatientForm({ onSave, onCancel, patientToEdit = null }) 
 
   const ageText = calculateAge(formData.data_nascimento);
   const imcText = calculateIMC();
+  const waterRec = calculateWater();
 
   return (
     <div className="panel" style={{ borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', backgroundColor: 'var(--surface)' }}>
@@ -479,6 +493,46 @@ export default function PatientForm({ onSave, onCancel, patientToEdit = null }) 
                   />
                 </div>
               </div>
+
+              {/* Card de Cálculo de Água (35 ml/kg) */}
+              {waterRec && (
+                <div
+                  style={{
+                    backgroundColor: '#F0FDF4',
+                    border: '1px solid #BBF7D0',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '0.85rem 1.25rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span style={{ fontSize: '1.5rem' }}>💧</span>
+                    <div>
+                      <strong style={{ color: '#166534', fontSize: '0.95rem', display: 'block' }}>
+                        Consumo Diário de Água Recomendado: {waterRec.litros} L/dia ({waterRec.ml.toLocaleString('pt-BR')} ml)
+                      </strong>
+                      <span style={{ color: '#15803D', fontSize: '0.82rem' }}>
+                        Fórmula científica: 35 ml para cada kg de peso corporal ({waterRec.formula})
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary"
+                    style={{ borderRadius: '20px', padding: '0.35rem 0.9rem', fontSize: '0.82rem', fontWeight: 700 }}
+                    onClick={() => {
+                      setFormData((prev) => ({ ...prev, litros_agua: waterRec.litros }));
+                      alert(`Quantidade de água definida para ${waterRec.litros} L/dia!`);
+                    }}
+                  >
+                    ⚡ Definir {waterRec.litros} L na Rotina
+                  </button>
+                </div>
+              )}
 
               {/* Objetivos */}
               <div className="form-group">
@@ -699,23 +753,68 @@ export default function PatientForm({ onSave, onCancel, patientToEdit = null }) 
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="litros_agua">Quantidade de Água por Dia</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label htmlFor="litros_agua" style={{ margin: 0, fontWeight: 700 }}>
+                      Quantidade de Água por Dia
+                    </label>
+                    {waterRec && (
+                      <span style={{ fontSize: '0.8rem', color: '#166534', fontWeight: 600 }}>
+                        💧 Calculado: {waterRec.litros} L ({waterRec.ml.toLocaleString('pt-BR')} ml)
+                      </span>
+                    )}
+                  </div>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <input
                       type="number"
-                      step="0.5"
+                      step="0.05"
                       id="litros_agua"
                       name="litros_agua"
                       className="form-control"
                       value={formData.litros_agua}
                       onChange={handleChange}
-                      placeholder="2"
+                      placeholder="Ex: 2.45"
                       style={{ paddingRight: '3.5rem' }}
                     />
                     <span style={{ position: 'absolute', right: '0.85rem', color: 'var(--text-muted)', fontWeight: 700, pointerEvents: 'none' }}>
                       litros
                     </span>
                   </div>
+
+                  {waterRec ? (
+                    <div
+                      style={{
+                        marginTop: '0.6rem',
+                        backgroundColor: '#F0FDF4',
+                        border: '1px solid #BBF7D0',
+                        borderRadius: 'var(--radius-md)',
+                        padding: '0.65rem 0.9rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '0.5rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '1.2rem' }}>💧</span>
+                        <div style={{ fontSize: '0.82rem', color: '#166534' }}>
+                          <strong>Cálculo Diário (35 ml/kg):</strong> {formData.peso_inicial} kg × 35 ml = <strong>{waterRec.ml.toLocaleString('pt-BR')} ml ({waterRec.litros} L)</strong>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        style={{ borderRadius: '15px', padding: '0.25rem 0.75rem', fontSize: '0.8rem', fontWeight: 700 }}
+                        onClick={() => setFormData((prev) => ({ ...prev, litros_agua: waterRec.litros }))}
+                      >
+                        ⚡ Aplicar {waterRec.litros} L
+                      </button>
+                    </div>
+                  ) : (
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '0.35rem', display: 'block' }}>
+                      💡 Dica: Preencha o peso na Aba Clínico para calcular a meta recomendada de 35 ml/kg automaticamente.
+                    </small>
+                  )}
                 </div>
               </div>
 

@@ -33,6 +33,16 @@ export default function PatientDetailModal({
 
   const age = calculateAge(patient.data_nascimento);
 
+  const calculatePatientWater = (peso) => {
+    const p = parseFloat(peso);
+    if (!p || p <= 0 || isNaN(p)) return null;
+    const ml = Math.round(p * 35);
+    const litros = Number((ml / 1000).toFixed(2));
+    return { ml, litros };
+  };
+
+  const waterRec = calculatePatientWater(patient.peso_inicial);
+
   const formatIMC = (peso, altura) => {
     const p = parseFloat(peso);
     const a = parseFloat(altura);
@@ -133,8 +143,13 @@ export default function PatientDetailModal({
                   <div className="metric-info">
                     <span className="metric-label">Água / Dia</span>
                     <span className="metric-value" style={{ fontSize: '1.4rem' }}>
-                      {patient.litros_agua ? `${patient.litros_agua} L` : '—'}
+                      {patient.litros_agua ? `${patient.litros_agua} L` : (waterRec ? `${waterRec.litros} L` : '—')}
                     </span>
+                    {waterRec && (
+                      <span style={{ fontSize: '0.75rem', color: '#B45309', fontWeight: 600, marginTop: '0.2rem', display: 'block' }}>
+                        Meta 35ml/kg: {waterRec.litros} L ({waterRec.ml.toLocaleString('pt-BR')} ml)
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -244,6 +259,21 @@ export default function PatientDetailModal({
                       <p style={{ fontWeight: '600', fontSize: '0.9rem' }}>{patient.horario_dorme || '—'}</p>
                     </div>
                   </div>
+
+                  {waterRec && (
+                    <div style={{ marginTop: '0.6rem', background: '#EFF6FF', padding: '0.75rem', borderRadius: '8px', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                      <span style={{ fontSize: '1.25rem' }}>💧</span>
+                      <div>
+                        <strong style={{ color: '#1E40AF', fontSize: '0.85rem', display: 'block' }}>
+                          Meta de Hidratação Diária (35 ml/kg): {waterRec.litros} Litros ({waterRec.ml.toLocaleString('pt-BR')} ml)
+                        </strong>
+                        <span style={{ color: '#2563EB', fontSize: '0.8rem' }}>
+                          Baseado no peso corporal: {patient.peso_inicial} kg × 35 ml
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {patient.atividade_fisica && (
                     <div style={{ marginTop: '0.5rem', background: '#F0FDF4', padding: '0.75rem', borderRadius: '8px', border: '1px solid #BBF7D0' }}>
                       <strong style={{ color: '#166534', fontSize: '0.85rem' }}>Atividade Física Regular:</strong>

@@ -142,7 +142,16 @@ export default function PatientModal({ isOpen, onClose, onSave, patientToEdit = 
     return { value: imc.toFixed(1), classif };
   };
 
+  const calculateWater = () => {
+    const p = parseFloat(formData.peso_inicial);
+    if (!p || p <= 0 || isNaN(p)) return null;
+    const ml = Math.round(p * 35);
+    const litros = Number((ml / 1000).toFixed(2));
+    return { ml, litros };
+  };
+
   const imc = calculateIMC();
+  const waterRec = calculateWater();
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -515,16 +524,35 @@ export default function PatientModal({ isOpen, onClose, onSave, patientToEdit = 
 
                 <div className="form-grid-2">
                   <div className="form-group">
-                    <label htmlFor="litros_agua">Consumo de Água (Litros / dia)</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                      <label htmlFor="litros_agua" style={{ margin: 0, fontWeight: 700 }}>
+                        Consumo de Água (Litros / dia)
+                      </label>
+                      {waterRec && (
+                        <span style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 600 }}>
+                          💧 Meta: {waterRec.litros} L ({waterRec.ml.toLocaleString('pt-BR')} ml)
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="number"
-                      step="0.1"
+                      step="0.05"
                       id="litros_agua"
                       name="litros_agua"
                       className="form-control"
                       value={formData.litros_agua}
                       onChange={handleChange}
                     />
+                    {waterRec && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-primary"
+                        style={{ marginTop: '0.4rem', fontSize: '0.78rem', padding: '0.2rem 0.6rem', borderRadius: '12px' }}
+                        onClick={() => setFormData((prev) => ({ ...prev, litros_agua: waterRec.litros }))}
+                      >
+                        ⚡ Aplicar cálculo 35ml/kg ({waterRec.litros} L)
+                      </button>
+                    )}
                   </div>
 
                   <div className="form-group" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
