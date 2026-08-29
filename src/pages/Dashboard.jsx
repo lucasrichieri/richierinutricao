@@ -182,7 +182,7 @@ export default function Dashboard() {
 
   const handleEditPatient = (patient) => {
     setEditingPatient(patient);
-    setPatientModalOpen(true);
+    setActiveTab('new_patient');
   };
 
   const handleSavePatient = async (formData) => {
@@ -191,14 +191,12 @@ export default function Dashboard() {
       const nutId = nutritionist?.id || session?.user?.id;
       if (editingPatient) {
         savedPatient = await updatePaciente(sql, editingPatient.id, formData);
-        addToast('Paciente atualizado com sucesso!', 'success');
-        setPatientModalOpen(false);
+        addToast('Paciente atualizado com sucesso no Neon DB!', 'success');
       } else {
         savedPatient = await createPaciente(sql, formData, nutId);
-        addToast('Paciente cadastrado com sucesso!', 'success');
-        setPatientModalOpen(false);
+        addToast('Paciente cadastrado com sucesso no Neon DB!', 'success');
       }
-
+      setEditingPatient(null);
       await loadData();
 
       // Prompt 4: Após salvar, redirecionar para o perfil do paciente recém cadastrado

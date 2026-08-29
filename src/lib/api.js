@@ -374,13 +374,33 @@ export async function updatePaciente(sql, pacienteId, pacienteData) {
   const rest = Array.isArray(pacienteData.restricoes_alimentares) ? pacienteData.restricoes_alimentares : [];
   const alerg = Array.isArray(pacienteData.alergias) ? pacienteData.alergias : [];
 
-  const current = getLocalData(STORAGE_KEYS.PACIENTES, []);
-  const updated = current.map(p => (p.id === pacienteId ? { ...p, ...pacienteData } : p));
-  setLocalData(STORAGE_KEYS.PACIENTES, updated);
+  let updatedRecord = {
+    id: pacienteId,
+    ...pacienteData,
+    peso_inicial: peso,
+    altura: alt,
+    refeicoes_por_dia: mef,
+    litros_agua: agua,
+    objetivos: objs,
+    patologias: pat,
+    restricoes_alimentares: rest,
+    alergias: alerg,
+  };
 
   if (sql) {
     try {
-      await sql`
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(pacienteId);
+      let targetId = pacienteId;
+      if (!isUUID) {
+        const found = await sql`
+          SELECT id FROM pacientes 
+          WHERE (email IS NOT NULL AND email = ${em || ''}) OR nome = ${pacienteData.nome || ''} 
+          LIMIT 1
+        `;
+        if (found && found[0]) targetId = found[0].id;
+      }
+
+      const res = await sql`
         UPDATE pacientes SET
           nome = ${pacienteData.nome},
           data_nascimento = ${dataNascimento},
@@ -404,13 +424,23 @@ export async function updatePaciente(sql, pacienteId, pacienteData) {
           atividade_fisica = ${Boolean(pacienteData.atividade_fisica)},
           atividade_fisica_descricao = ${atvDesc},
           observacoes = ${obs}
-        WHERE id = ${pacienteId}
+        WHERE id = ${targetId}::uuid
+        RETURNING *
       `;
+      if (res && res[0]) {
+        updatedRecord = res[0];
+        console.log('Paciente atualizado com sucesso no Neon DB:', updatedRecord.id);
+      }
     } catch (err) {
       console.error('Erro ao atualizar paciente no Neon DB:', err);
     }
   }
-  return { id: pacienteId, ...pacienteData };
+
+  const current = getLocalData(STORAGE_KEYS.PACIENTES, []);
+  const updated = current.map(p => (p.id === pacienteId || p.id === updatedRecord.id ? updatedRecord : p));
+  setLocalData(STORAGE_KEYS.PACIENTES, updated);
+
+  return updatedRecord;
 }
 
 export async function deletePaciente(sql, pacienteId, pacienteEmail = null, pacienteNome = null) {

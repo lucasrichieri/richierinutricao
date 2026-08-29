@@ -71,12 +71,68 @@ export default function PatientForm({ onSave, onCancel, patientToEdit = null }) 
   useEffect(() => {
     if (patientToEdit) {
       setFormData({
-        ...patientToEdit,
-        objetivos: patientToEdit.objetivos || [],
-        patologias: patientToEdit.patologias || [],
-        restricoes_alimentares: patientToEdit.restricoes_alimentares || [],
-        alergias: patientToEdit.alergias || [],
+        nome: patientToEdit.nome || '',
+        data_nascimento: patientToEdit.data_nascimento
+          ? typeof patientToEdit.data_nascimento === 'string'
+            ? patientToEdit.data_nascimento.substring(0, 10)
+            : patientToEdit.data_nascimento
+          : '',
+        sexo: patientToEdit.sexo || 'Feminino',
+        telefone: patientToEdit.telefone || '',
+        whatsapp: patientToEdit.whatsapp || '',
+        email: patientToEdit.email || '',
+        peso_inicial: patientToEdit.peso_inicial != null ? String(patientToEdit.peso_inicial) : '',
+        altura: patientToEdit.altura != null ? String(patientToEdit.altura) : '',
+        objetivos: Array.isArray(patientToEdit.objetivos) ? patientToEdit.objetivos : [],
+        objetivo_texto: patientToEdit.objetivo_texto || '',
+        nivel_atividade: patientToEdit.nivel_atividade || 'Moderadamente ativo',
+        patologias: Array.isArray(patientToEdit.patologias) ? patientToEdit.patologias : [],
+        patologia_custom: '',
+        restricoes_alimentares: Array.isArray(patientToEdit.restricoes_alimentares) ? patientToEdit.restricoes_alimentares : [],
+        restricao_custom: '',
+        alergias: Array.isArray(patientToEdit.alergias) ? patientToEdit.alergias : [],
+        alergia_custom: '',
+        medicamentos: patientToEdit.medicamentos || '',
+        suplementos: patientToEdit.suplementos || '',
+        refeicoes_por_dia: patientToEdit.refeicoes_por_dia || 4,
+        horario_acorda: patientToEdit.horario_acorda || '06:00',
+        horario_dorme: patientToEdit.horario_dorme || '22:30',
+        litros_agua: patientToEdit.litros_agua != null ? patientToEdit.litros_agua : 2,
+        atividade_fisica: Boolean(patientToEdit.atividade_fisica),
+        atividade_fisica_descricao: patientToEdit.atividade_fisica_descricao || '',
+        observacoes: patientToEdit.observacoes || '',
       });
+      setActiveTab('pessoal');
+    } else {
+      setFormData({
+        nome: '',
+        data_nascimento: '',
+        sexo: 'Feminino',
+        telefone: '',
+        whatsapp: '',
+        email: '',
+        peso_inicial: '',
+        altura: '',
+        objetivos: [],
+        objetivo_texto: '',
+        nivel_atividade: 'Moderadamente ativo',
+        patologias: [],
+        patologia_custom: '',
+        restricoes_alimentares: [],
+        restricao_custom: '',
+        alergias: [],
+        alergia_custom: '',
+        medicamentos: '',
+        suplementos: '',
+        refeicoes_por_dia: 4,
+        horario_acorda: '06:00',
+        horario_dorme: '22:30',
+        litros_agua: 2,
+        atividade_fisica: false,
+        atividade_fisica_descricao: '',
+        observacoes: '',
+      });
+      setActiveTab('pessoal');
     }
   }, [patientToEdit]);
 
@@ -771,7 +827,7 @@ export default function PatientForm({ onSave, onCancel, patientToEdit = null }) 
               </button>
             ) : (
               <button type="submit" className="btn btn-primary" style={{ padding: '0.6rem 1.5rem', fontWeight: 800 }}>
-                💾 Salvar Cadastro do Paciente
+                {patientToEdit ? '💾 Salvar Alterações' : '💾 Salvar Cadastro do Paciente'}
               </button>
             )}
           </div>
