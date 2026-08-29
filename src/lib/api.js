@@ -212,6 +212,61 @@ export async function getPacientes(sql, nutricionistaId = null) {
   return local;
 }
 
+/**
+ * Sincroniza pacientes existentes no localStorage para o banco Neon DB
+ */
+export async function syncLocalPacientesToNeon(sql, nutricionistaId = null) {
+  if (!sql) return;
+  const local = getLocalData(STORAGE_KEYS.PACIENTES, []);
+  if (!local || local.length === 0) return;
+
+  try {
+    for (const p of local) {
+      if (!p.nome) continue;
+      // Verifica se o paciente já existe no Neon DB
+      const existing = await sql`
+        SELECT id FROM pacientes 
+        WHERE (email IS NOT NULL AND email = ${p.email || ''}) 
+           OR (nome = ${p.nome} AND (nutricionista_id = ${nutricionistaId || null} OR nutricionista_id IS NULL))
+        LIMIT 1
+      `;
+
+      if (!existing || existing.length === 0) {
+        const peso = p.peso_inicial && !isNaN(parseFloat(p.peso_inicial)) ? parseFloat(p.peso_inicial) : null;
+        const alt = p.altura && !isNaN(parseFloat(p.altura)) ? parseFloat(p.altura) : null;
+        const mef = p.refeicoes_por_dia ? parseInt(p.refeicoes_por_dia, 10) : null;
+        const agua = p.litros_agua ? parseFloat(p.litros_agua) : null;
+        const objs = Array.isArray(p.objetivos) ? p.objetivos : [];
+        const pat = Array.isArray(p.patologias) ? p.patologias : [];
+        const rest = Array.isArray(p.restricoes_alimentares) ? p.restricoes_alimentares : [];
+        const alerg = Array.isArray(p.alergias) ? p.alergias : [];
+
+        await sql`
+          INSERT INTO pacientes (
+            nutricionista_id, nome, data_nascimento, sexo, whatsapp, email,
+            peso_inicial, altura, objetivos, objetivo_texto,
+            nivel_atividade, patologias, restricoes_alimentares, alergias,
+            medicamentos, suplementos, refeicoes_por_dia, horario_acorda,
+            horario_dorme, litros_agua, atividade_fisica, atividade_fisica_descricao, observacoes
+          ) VALUES (
+            ${nutricionistaId || null}, ${p.nome}, ${p.data_nascimento || null}, ${p.sexo || null},
+            ${p.whatsapp || p.telefone || null}, ${p.email || null}, ${peso},
+            ${alt}, ${objs}, ${p.objetivo_texto || null},
+            ${p.nivel_atividade || null}, ${pat}, ${rest},
+            ${alerg}, ${p.medicamentos || null}, ${p.suplementos || null},
+            ${mef}, ${p.horario_acorda || null}, ${p.horario_dorme || null},
+            ${agua}, ${Boolean(p.atividade_fisica)}, ${p.atividade_fisica_descricao || null},
+            ${p.observacoes || null}
+          )
+        `;
+        console.log('Paciente do cache sincronizado com sucesso para o Neon DB:', p.nome);
+      }
+    }
+  } catch (err) {
+    console.warn('Aviso ao sincronizar pacientes do cache com Neon DB:', err.message);
+  }
+}
+
 export async function createPaciente(sql, pacienteData, nutricionistaId = null) {
   const id = crypto.randomUUID ? crypto.randomUUID() : `pac_${Date.now()}`;
   const now = new Date().toISOString();

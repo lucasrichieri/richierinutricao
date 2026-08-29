@@ -10,6 +10,7 @@ import {
   createPaciente,
   updatePaciente,
   deletePaciente,
+  syncLocalPacientesToNeon,
   getConsultas,
   createConsulta,
   deleteConsulta,
@@ -129,8 +130,12 @@ export default function Dashboard() {
       const perfil = await getPerfilNutricionista(sql, session.user);
       setNutritionist(perfil);
 
-      // 2. Carrega Pacientes do Nutricionista logado em tempo real
       const nutId = perfil?.id || session.user.id;
+
+      // Sincroniza automaticamente pacientes do cache local para o Neon DB
+      await syncLocalPacientesToNeon(sql, nutId);
+
+      // 2. Carrega Pacientes do Nutricionista logado em tempo real
       const pacs = await getPacientes(sql, nutId);
       setPatients(pacs || []);
 
