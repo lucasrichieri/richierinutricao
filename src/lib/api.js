@@ -413,11 +413,18 @@ export async function updatePaciente(sql, pacienteId, pacienteData) {
   return { id: pacienteId, ...pacienteData };
 }
 
-export async function deletePaciente(sql, pacienteId) {
+export async function deletePaciente(sql, pacienteId, pacienteEmail = null, pacienteNome = null) {
+  // Remove do cache local
   const current = getLocalData(STORAGE_KEYS.PACIENTES, []);
-  setLocalData(STORAGE_KEYS.PACIENTES, current.filter(p => p.id !== pacienteId));
+  const filtered = current.filter(p => {
+    if (p.id === pacienteId) return false;
+    if (pacienteEmail && p.email === pacienteEmail) return false;
+    if (pacienteNome && p.nome === pacienteNome) return false;
+    return true;
+  });
+  setLocalData(STORAGE_KEYS.PACIENTES, filtered);
 
-  // Remove também consultas e planos desse paciente
+  // Remove também consultas e planos desse paciente do cache local
   const consultas = getLocalData(STORAGE_KEYS.CONSULTAS, []);
   setLocalData(STORAGE_KEYS.CONSULTAS, consultas.filter(c => c.paciente_id !== pacienteId));
 
@@ -426,11 +433,30 @@ export async function deletePaciente(sql, pacienteId) {
 
   if (sql) {
     try {
-      await sql`DELETE FROM planos_alimentares WHERE paciente_id = ${pacienteId}`;
-      await sql`DELETE FROM consultas WHERE paciente_id = ${pacienteId}`;
-      await sql`DELETE FROM pacientes WHERE id = ${pacienteId}`;
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(pacienteId);
+
+      let targetId = pacienteId;
+      if (!isUUID) {
+        // Se o ID não for UUID (ex: criado offline), busca o UUID real no Neon DB
+        const found = await sql`
+          SELECT id FROM pacientes 
+          WHERE (email IS NOT NULL AND email = ${pacienteEmail || ''}) 
+             OR nome = ${pacienteNome || ''} 
+          LIMIT 1
+        `;
+        if (found && found[0]) {
+          targetId = found[0].id;
+        }
+      }
+
+      if (targetId) {
+        await sql`DELETE FROM planos_alimentares WHERE paciente_id = ${targetId}::uuid`;
+        await sql`DELETE FROM consultas WHERE paciente_id = ${targetId}::uuid`;
+        await sql`DELETE FROM pacientes WHERE id = ${targetId}::uuid`;
+        console.log('Paciente excluído com sucesso do Neon DB:', targetId);
+      }
     } catch (err) {
-      console.warn('Erro ao deletar paciente no Neon:', err.message);
+      console.error('Erro ao deletar paciente no Neon DB:', err);
     }
   }
   return true;

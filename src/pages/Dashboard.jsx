@@ -132,10 +132,7 @@ export default function Dashboard() {
 
       const nutId = perfil?.id || session.user.id;
 
-      // Sincroniza automaticamente pacientes do cache local para o Neon DB
-      await syncLocalPacientesToNeon(sql, nutId);
-
-      // 2. Carrega Pacientes do Nutricionista logado em tempo real
+      // 2. Carrega Pacientes do Nutricionista logado em tempo real do Neon DB
       const pacs = await getPacientes(sql, nutId);
       setPatients(pacs || []);
 
@@ -216,12 +213,18 @@ export default function Dashboard() {
     }
   };
 
-  const handleDeletePatient = async (id) => {
+  const handleDeletePatient = async (patientOrId) => {
+    const id = typeof patientOrId === 'object' ? patientOrId.id : patientOrId;
+    const patient = typeof patientOrId === 'object' ? patientOrId : patients.find((p) => p.id === id);
+
     try {
-      await deletePaciente(sql, id);
+      // Remove da interface imediatamente
+      setPatients((prev) => prev.filter((p) => p.id !== id && (!patient?.nome || p.nome !== patient.nome)));
+      await deletePaciente(sql, id, patient?.email, patient?.nome);
       addToast('Paciente removido com sucesso!', 'success');
-      loadData();
+      await loadData();
     } catch (err) {
+      console.error('Erro ao excluir paciente:', err);
       addToast('Erro ao excluir paciente', 'error');
     }
   };
@@ -855,7 +858,7 @@ export default function Dashboard() {
                                   className="btn btn-danger-subtle btn-sm btn-icon"
                                   onClick={() => {
                                     if (window.confirm(`Excluir paciente ${patient.nome}?`)) {
-                                      handleDeletePatient(patient.id);
+                                      handleDeletePatient(patient);
                                     }
                                   }}
                                   title="Excluir Paciente"

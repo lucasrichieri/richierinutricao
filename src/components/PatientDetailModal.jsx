@@ -372,7 +372,7 @@ export default function PatientDetailModal({
             className="btn btn-danger-subtle btn-sm"
             onClick={() => {
               if (window.confirm(`Tem certeza que deseja excluir o cadastro de ${patient.nome}?`)) {
-                onDeletePatient(patient.id);
+                onDeletePatient(patient);
                 onClose();
               }
             }}
