@@ -111,7 +111,7 @@ export default function MealPlanPrintView({
     }
   };
 
-  // Divide os dias nos blocos de páginas A4 estruturadas
+  // Localiza o cardápio do dia específico
   const getDayData = (diaNome) => {
     if (!planoSemanal) return null;
     return planoSemanal.find((d) => d.dia === diaNome) || null;
@@ -136,7 +136,7 @@ export default function MealPlanPrintView({
           borderRadius: '7px',
           overflow: 'hidden',
           backgroundColor: '#FFFFFF',
-          marginBottom: '10px',
+          marginBottom: '12px',
         }}
       >
         {/* Banner do Dia */}
@@ -144,7 +144,7 @@ export default function MealPlanPrintView({
           style={{
             backgroundColor: '#15803D',
             color: '#FFFFFF',
-            padding: '4px 10px',
+            padding: '5px 10px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -153,11 +153,11 @@ export default function MealPlanPrintView({
           <strong style={{ fontSize: '13px', fontWeight: 800 }}>
             🗓️ {dayObj.dia}
           </strong>
-          <span style={{ fontSize: '11px', opacity: 0.9 }}>Cardápio Nutricional</span>
+          <span style={{ fontSize: '10.5px', opacity: 0.95 }}>Cardápio Balanceado</span>
         </div>
 
         {/* Refeições do Dia */}
-        <div style={{ padding: '7px 9px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div style={{ padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
           {REFEICOES_ORDEM.map((refKey) => {
             const config = REFEICOES_CONFIG[refKey] || {
               label: refKey,
@@ -175,14 +175,14 @@ export default function MealPlanPrintView({
                   backgroundColor: config.bgColor,
                   border: `1px solid ${config.borderColor}`,
                   borderRadius: '5px',
-                  padding: '5px 8px',
+                  padding: '4px 7px',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                  <strong style={{ fontSize: '11.5px', color: config.color, fontWeight: 800 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                  <strong style={{ fontSize: '11px', color: config.color, fontWeight: 800 }}>
                     {config.label}
                   </strong>
-                  <span style={{ fontSize: '9.5px', color: '#64748B', fontWeight: 600 }}>
+                  <span style={{ fontSize: '9px', color: '#64748B', fontWeight: 600 }}>
                     (Escolha 1 das 5 opções)
                   </span>
                 </div>
@@ -192,7 +192,7 @@ export default function MealPlanPrintView({
                     <div
                       key={idx}
                       style={{
-                        fontSize: '10.5px',
+                        fontSize: '10px',
                         color: '#1E293B',
                         lineHeight: '1.25',
                         display: 'flex',
@@ -200,7 +200,7 @@ export default function MealPlanPrintView({
                         gridColumn: idx === 4 ? '1 / -1' : 'auto',
                       }}
                     >
-                      <strong style={{ color: config.color, minWidth: '46px', fontSize: '10px' }}>
+                      <strong style={{ color: config.color, minWidth: '45px', fontSize: '9.5px' }}>
                         Opção {idx + 1}:
                       </strong>
                       <span>{op}</span>
@@ -250,7 +250,7 @@ export default function MealPlanPrintView({
                 Plano Alimentar Semanal em PDF
               </h2>
               <span style={{ fontSize: '0.8rem', color: '#64748B' }}>
-                Documento de 4 páginas A4 formatado e sem quebras de texto
+                Documento de 4 páginas A4 perfeitamente balanceado, sem cortes de texto
               </span>
             </div>
           </div>
@@ -304,14 +304,13 @@ export default function MealPlanPrintView({
         >
           <div ref={pdfContainerRef} style={{ display: 'flex', flexDirection: 'column', gap: '2rem', alignItems: 'center' }}>
             {/* ====================================================================
-                PÁGINA 1: Cabeçalho + Metas + Segunda-feira + Terça-feira
+                PÁGINA 1: Cabeçalho Completo + Metas + Segunda-feira + Orientações
                 ==================================================================== */}
             <div
               className="pdf-a4-page"
               style={{
                 width: '794px',
                 minHeight: '1120px',
-                height: '1120px',
                 backgroundColor: '#FFFFFF',
                 boxSizing: 'border-box',
                 padding: '24px 28px',
@@ -369,7 +368,7 @@ export default function MealPlanPrintView({
                     border: '1px solid #E2E8F0',
                     borderRadius: '6px',
                     padding: '8px 12px',
-                    marginBottom: '10px',
+                    marginBottom: '12px',
                     display: 'grid',
                     gridTemplateColumns: '1.8fr 1fr 1fr',
                     gap: '8px',
@@ -415,8 +414,25 @@ export default function MealPlanPrintView({
                 {/* Segunda-feira */}
                 {renderDayCard(segunda)}
 
-                {/* Terça-feira */}
-                {renderDayCard(terca)}
+                {/* Orientações Clínicas Gerais na Página 1 */}
+                {conteudo?.orientacoes_gerais && (
+                  <div
+                    style={{
+                      border: '1.5px solid #CBD5E1',
+                      borderRadius: '7px',
+                      padding: '10px 14px',
+                      backgroundColor: '#F8FAFC',
+                      marginTop: '6px',
+                    }}
+                  >
+                    <h3 style={{ fontSize: '11.5px', color: '#15803D', margin: '0 0 4px', fontWeight: 800 }}>
+                      📌 Orientações e Recomendações Nutricionais Iniciais
+                    </h3>
+                    <p style={{ fontSize: '10px', color: '#334155', lineHeight: '1.45', margin: 0 }}>
+                      {conteudo.orientacoes_gerais}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Rodapé da Página 1 */}
@@ -437,14 +453,13 @@ export default function MealPlanPrintView({
             </div>
 
             {/* ====================================================================
-                PÁGINA 2: Quarta-feira + Quinta-feira
+                PÁGINA 2: Terça-feira + Quarta-feira
                 ==================================================================== */}
             <div
               className="pdf-a4-page"
               style={{
                 width: '794px',
                 minHeight: '1120px',
-                height: '1120px',
                 backgroundColor: '#FFFFFF',
                 boxSizing: 'border-box',
                 padding: '24px 28px',
@@ -469,19 +484,19 @@ export default function MealPlanPrintView({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <img src="/logo.png" alt="Logo" style={{ height: '24px', width: 'auto' }} />
-                    <strong style={{ fontSize: '13px', color: '#15803D' }}>Richieri Nutrição</strong>
+                    <img src="/logo.png" alt="Logo" style={{ height: '22px', width: 'auto' }} />
+                    <strong style={{ fontSize: '12.5px', color: '#15803D' }}>Richieri Nutrição</strong>
                   </div>
-                  <div style={{ fontSize: '11px', color: '#475569' }}>
+                  <div style={{ fontSize: '10.5px', color: '#475569' }}>
                     Paciente: <strong>{patient?.nome || 'Paciente'}</strong>
                   </div>
                 </div>
 
+                {/* Terça-feira (agora na Página 2 com espaço total para as 5 refeições!) */}
+                {renderDayCard(terca)}
+
                 {/* Quarta-feira */}
                 {renderDayCard(quarta)}
-
-                {/* Quinta-feira */}
-                {renderDayCard(quinta)}
               </div>
 
               {/* Rodapé da Página 2 */}
@@ -502,14 +517,13 @@ export default function MealPlanPrintView({
             </div>
 
             {/* ====================================================================
-                PÁGINA 3: Sexta-feira + Sábado
+                PÁGINA 3: Quinta-feira + Sexta-feira
                 ==================================================================== */}
             <div
               className="pdf-a4-page"
               style={{
                 width: '794px',
                 minHeight: '1120px',
-                height: '1120px',
                 backgroundColor: '#FFFFFF',
                 boxSizing: 'border-box',
                 padding: '24px 28px',
@@ -534,19 +548,19 @@ export default function MealPlanPrintView({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <img src="/logo.png" alt="Logo" style={{ height: '24px', width: 'auto' }} />
-                    <strong style={{ fontSize: '13px', color: '#15803D' }}>Richieri Nutrição</strong>
+                    <img src="/logo.png" alt="Logo" style={{ height: '22px', width: 'auto' }} />
+                    <strong style={{ fontSize: '12.5px', color: '#15803D' }}>Richieri Nutrição</strong>
                   </div>
-                  <div style={{ fontSize: '11px', color: '#475569' }}>
+                  <div style={{ fontSize: '10.5px', color: '#475569' }}>
                     Paciente: <strong>{patient?.nome || 'Paciente'}</strong>
                   </div>
                 </div>
 
+                {/* Quinta-feira */}
+                {renderDayCard(quinta)}
+
                 {/* Sexta-feira */}
                 {renderDayCard(sexta)}
-
-                {/* Sábado */}
-                {renderDayCard(sabado)}
               </div>
 
               {/* Rodapé da Página 3 */}
@@ -567,14 +581,13 @@ export default function MealPlanPrintView({
             </div>
 
             {/* ====================================================================
-                PÁGINA 4: Domingo + Orientações Nutricionais + Assinatura Digital
+                PÁGINA 4: Sábado + Domingo + Assinatura Digital
                 ==================================================================== */}
             <div
               className="pdf-a4-page"
               style={{
                 width: '794px',
                 minHeight: '1120px',
-                height: '1120px',
                 backgroundColor: '#FFFFFF',
                 boxSizing: 'border-box',
                 padding: '24px 28px',
@@ -599,35 +612,19 @@ export default function MealPlanPrintView({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <img src="/logo.png" alt="Logo" style={{ height: '24px', width: 'auto' }} />
-                    <strong style={{ fontSize: '13px', color: '#15803D' }}>Richieri Nutrição</strong>
+                    <img src="/logo.png" alt="Logo" style={{ height: '22px', width: 'auto' }} />
+                    <strong style={{ fontSize: '12.5px', color: '#15803D' }}>Richieri Nutrição</strong>
                   </div>
-                  <div style={{ fontSize: '11px', color: '#475569' }}>
+                  <div style={{ fontSize: '10.5px', color: '#475569' }}>
                     Paciente: <strong>{patient?.nome || 'Paciente'}</strong>
                   </div>
                 </div>
 
+                {/* Sábado */}
+                {renderDayCard(sabado)}
+
                 {/* Domingo */}
                 {renderDayCard(domingo)}
-
-                {/* Orientações Clínicas Gerais */}
-                <div
-                  style={{
-                    border: '1.5px solid #CBD5E1',
-                    borderRadius: '7px',
-                    padding: '12px 16px',
-                    backgroundColor: '#F8FAFC',
-                    marginTop: '12px',
-                  }}
-                >
-                  <h3 style={{ fontSize: '12.5px', color: '#15803D', margin: '0 0 6px', fontWeight: 800 }}>
-                    📌 Orientações e Recomendações Nutricionais Importantes
-                  </h3>
-                  <p style={{ fontSize: '11px', color: '#334155', lineHeight: '1.5', margin: 0 }}>
-                    {conteudo?.orientacoes_gerais ||
-                      'Mastigar bem e devagar. Ingerir água longe das principais refeições. Priorizar alimentos in natura e evitar ultraprocessados.'}
-                  </p>
-                </div>
               </div>
 
               {/* Rodapé com Assinatura Digital e Numeração de Página */}
@@ -637,21 +634,21 @@ export default function MealPlanPrintView({
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'flex-end',
-                    paddingBottom: '14px',
+                    paddingBottom: '12px',
                     borderBottom: '1px solid #E2E8F0',
                   }}
                 >
-                  <div style={{ fontSize: '10px', color: '#64748B' }}>
+                  <div style={{ fontSize: '9.5px', color: '#64748B', lineHeight: '1.4' }}>
                     <span>Emitido digitalmente via Sistema Richieri Nutrição</span>
                     <br />
-                    <span>Autenticação Digital: {plan.id || 'RN-PRESCRICAO'}</span>
+                    <span>Autenticação: {plan.id ? String(plan.id).substring(0, 18) : 'RN-PRESCRICAO'}</span>
                   </div>
 
                   <div style={{ textAlign: 'center', width: '220px', borderTop: '1px solid #94A3B8', paddingTop: '6px' }}>
                     <strong style={{ fontSize: '11px', color: '#0F172A', display: 'block' }}>
                       {nutritionist?.nome || 'Dra. Gabriela Richieri'}
                     </strong>
-                    <span style={{ fontSize: '10px', color: '#64748B' }}>
+                    <span style={{ fontSize: '9.5px', color: '#64748B' }}>
                       {nutritionist?.crn || 'CRN-3 48.912'}
                     </span>
                   </div>
