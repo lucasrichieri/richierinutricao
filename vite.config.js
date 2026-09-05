@@ -1,5 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import gerarPlanoHandler from './api/gerar-plano.js';
+import enviarEmailHandler from './api/enviar-plano-email.js';
 
 function serverlessApiPlugin() {
   return {
@@ -10,7 +12,7 @@ function serverlessApiPlugin() {
         const isEnviarEmail = req.url === '/api/enviar-plano-email' || req.url.startsWith('/api/enviar-plano-email');
 
         if (isGerarPlano || isEnviarEmail) {
-          // Atualiza as variáveis do .env dinamicamente
+          // Atualiza as variáveis do .env dinamicamente a cada requisição
           const currentEnv = loadEnv(process.env.NODE_ENV || 'development', process.cwd(), '');
           Object.assign(process.env, currentEnv);
 
@@ -37,11 +39,9 @@ function serverlessApiPlugin() {
 
             try {
               if (isGerarPlano) {
-                const { default: handler } = await import(`./api/gerar-plano.js?update=${Date.now()}`);
-                await handler(req, res);
+                await gerarPlanoHandler(req, res);
               } else if (isEnviarEmail) {
-                const { default: handler } = await import(`./api/enviar-plano-email.js?update=${Date.now()}`);
-                await handler(req, res);
+                await enviarEmailHandler(req, res);
               }
             } catch (err) {
               res.statusCode = 500;
