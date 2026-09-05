@@ -2,11 +2,9 @@ import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
 
-// Função auxiliar para buscar variáveis do process.env ou diretamente do .env no disco
-function getEnvVar(key, defaultValue = '') {
-  if (process.env[key] && process.env[key].trim()) {
-    return process.env[key].trim();
-  }
+// Carrega TODAS as variáveis do .env diretamente do disco (sem cache)
+function loadEnvFromDisk() {
+  const result = {};
   try {
     const envPath = path.resolve(process.cwd(), '.env');
     if (fs.existsSync(envPath)) {
@@ -17,17 +15,25 @@ function getEnvVar(key, defaultValue = '') {
         if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
           const firstEqual = trimmed.indexOf('=');
           const k = trimmed.substring(0, firstEqual).trim();
-          const v = trimmed.substring(firstEqual + 1).trim();
-          if (k === key) {
-            return v.replace(/^["']|["']$/g, '').trim();
-          }
+          const v = trimmed.substring(firstEqual + 1).trim().replace(/^["']|["']$/g, '');
+          result[k] = v;
         }
       }
     }
   } catch (err) {
-    console.warn(`Não foi possível ler .env no disco para chave ${key}:`, err.message);
+    console.warn('Não foi possível ler .env do disco:', err.message);
   }
-  return defaultValue;
+  return result;
+}
+
+// Resolve uma variável: body > disco .env > process.env > default
+function resolveVar(bodyVal, diskEnv, keys, defaultVal = '') {
+  if (bodyVal && bodyVal.trim()) return bodyVal.trim();
+  for (const key of keys) {
+    if (diskEnv[key] && diskEnv[key].trim()) return diskEnv[key].trim();
+    if (process.env[key] && process.env[key].trim()) return process.env[key].trim();
+  }
+  return defaultVal;
 }
 
 export default async function handler(req, res) {
@@ -71,17 +77,22 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Arquivo PDF não fornecido.' });
     }
 
-    // Configuração de Credenciais SMTP (Req Body > VITE_SMTP > SMTP > Fallbacks)
-    const smtpHost = (bodySmtpHost || getEnvVar('VITE_SMTP_HOST') || getEnvVar('SMTP_HOST') || 'smtp.gmail.com').trim();
-    const smtpPort = parseInt((bodySmtpPort || getEnvVar('VITE_SMTP_PORT') || getEnvVar('SMTP_PORT') || '465').toString().trim(), 10);
+    // Carrega variáveis diretamente do arquivo .env (sem cache)
+    const diskEnv = loadEnvFromDisk();
+
+    // Resolve credenciais SMTP: body > .env disco > process.env
+    const smtpHost = resolveVar(bodySmtpHost, diskEnv, ['SMTP_HOST', 'VITE_SMTP_HOST'], 'smtp.gmail.com');
+    const smtpPort = parseInt(resolveVar(bodySmtpPort, diskEnv, ['SMTP_PORT', 'VITE_SMTP_PORT'], '465'), 10);
     const smtpSecure = smtpPort === 465;
-    const smtpUser = (bodySmtpUser || getEnvVar('VITE_SMTP_USER') || getEnvVar('SMTP_USER') || getEnvVar('GMAIL_USER') || getEnvVar('EMAIL_USER') || '').trim();
-    const smtpPass = (bodySmtpPass || getEnvVar('VITE_SMTP_PASS') || getEnvVar('SMTP_PASS') || getEnvVar('GMAIL_PASS') || getEnvVar('EMAIL_PASS') || '').trim();
-    const emailFrom = (bodySmtpFrom || getEnvVar('VITE_SMTP_FROM') || getEnvVar('SMTP_FROM') || getEnvVar('EMAIL_FROM') || smtpUser || 'contato@richierinutricao.com.br').trim();
+    const smtpUser = resolveVar(bodySmtpUser, diskEnv, ['SMTP_USER', 'VITE_SMTP_USER', 'GMAIL_USER', 'EMAIL_USER']);
+    const smtpPass = resolveVar(bodySmtpPass, diskEnv, ['SMTP_PASS', 'VITE_SMTP_PASS', 'GMAIL_PASS', 'EMAIL_PASS']);
+    const emailFrom = resolveVar(bodySmtpFrom, diskEnv, ['SMTP_FROM', 'VITE_SMTP_FROM', 'EMAIL_FROM']) || smtpUser || 'contato@richierinutricao.com.br';
+
+    console.log(`[SMTP] User: ${smtpUser ? 'OK' : 'MISSING'}, Pass: ${smtpPass ? 'OK' : 'MISSING'}, Host: ${smtpHost}`);
 
     // Se as credenciais SMTP não estiverem preenchidas
     if (!smtpUser || !smtpPass) {
-      console.warn('Credenciais SMTP (SMTP_USER e SMTP_PASS) não configuradas.');
+      console.warn('Credenciais SMTP não encontradas em nenhuma fonte (body, .env disco, process.env).');
       return res.status(200).json({
         success: false,
         requiresConfig: true,

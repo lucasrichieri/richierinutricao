@@ -747,7 +747,10 @@ export default function MealPlanPrintView({
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => setIsEmailModalOpen(true)}
+              onClick={() => {
+                setEmailStatusMessage({ text: '', type: '' });
+                setIsEmailModalOpen(true);
+              }}
               style={{
                 fontWeight: 700,
                 display: 'inline-flex',
