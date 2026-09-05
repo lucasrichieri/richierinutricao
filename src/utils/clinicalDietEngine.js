@@ -1,7 +1,4 @@
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
-
-// 7 Dias da semana
-const DIAS_SEMANA = [
+export const DIAS_SEMANA = [
   'Segunda-feira',
   'Terça-feira',
   'Quarta-feira',
@@ -11,62 +8,16 @@ const DIAS_SEMANA = [
   'Domingo',
 ];
 
-// Schema para Structured Outputs do Gemini
-const PLANO_SCHEMA = {
-  type: SchemaType.OBJECT,
-  properties: {
-    plano_semanal: {
-      type: SchemaType.ARRAY,
-      description: 'Plano alimentar semanal completo com 7 dias diferentes',
-      items: {
-        type: SchemaType.OBJECT,
-        properties: {
-          dia: {
-            type: SchemaType.STRING,
-            description: 'Nome do dia da semana (ex: Segunda-feira)',
-          },
-          refeicoes: {
-            type: SchemaType.OBJECT,
-            properties: {
-              cafe_da_manha: {
-                type: SchemaType.ARRAY,
-                items: { type: SchemaType.STRING },
-                description: '5 opções saudáveis e práticas para o café da manhã',
-              },
-              lanche_manha: {
-                type: SchemaType.ARRAY,
-                items: { type: SchemaType.STRING },
-                description: '5 opções saudáveis e práticas para o lanche da manhã',
-              },
-              almoco: {
-                type: SchemaType.ARRAY,
-                items: { type: SchemaType.STRING },
-                description: '5 opções saudáveis e balanceadas para o almoço',
-              },
-              lanche_tarde: {
-                type: SchemaType.ARRAY,
-                items: { type: SchemaType.STRING },
-                description: '5 opções saudáveis e nutritivas para o lanche da tarde',
-              },
-              jantar: {
-                type: SchemaType.ARRAY,
-                items: { type: SchemaType.STRING },
-                description: '5 opções leves e nutritivas para o jantar',
-              },
-            },
-            required: ['cafe_da_manha', 'lanche_manha', 'almoco', 'lanche_tarde', 'jantar'],
-          },
-        },
-        required: ['dia', 'refeicoes'],
-      },
-    },
-  },
-  required: ['plano_semanal'],
-};
+export const REFEICOES_NOMES = [
+  { key: 'cafe_da_manha', label: '☕ Café da Manhã', icon: '☕' },
+  { key: 'lanche_manha', label: '🍎 Lanche da Manhã', icon: '🍎' },
+  { key: 'almoco', label: '🍲 Almoço', icon: '🍲' },
+  { key: 'lanche_tarde', label: '🥪 Lanche da Tarde', icon: '🥪' },
+  { key: 'jantar', label: '🥗 Jantar', icon: '🥗' },
+];
 
 /**
  * Gerador de Plano Clínico Dinâmico e 100% Variado (7 Dias Únicos)
- * Utilizado quando a IA do Gemini atinge limite de requisições ou está offline
  */
 export function generateDynamicClinicalPlan(paciente = {}) {
   const restricoes = Array.isArray(paciente.restricoes_alimentares) ? paciente.restricoes_alimentares.join(', ') : '';
@@ -81,13 +32,11 @@ export function generateDynamicClinicalPlan(paciente = {}) {
   const isHipertrofia = textLower.includes('massa') || textLower.includes('hipertrofia') || textLower.includes('muscul');
   const isDiabetes = textLower.includes('diabetes') || textLower.includes('glicemia');
 
-  // Ajustes de carboidratos e laticínios
   const iogurte = isSemLactose ? 'Bebida vegetal de coco/amêndoas (200ml)' : 'Iogurte natural desnatado ou grego (160g)';
   const queijo = isSemLactose ? 'Tofu temperado com orégano e azeite (50g)' : 'Queijo minas frescal ou cottage (2 fatias)';
-  const pao1 = isSemGluten ? 'Tapioca de frigideira com sementes de chia (2 colheres de goma)' : 'Pão 100% integral artesanal (2 fatias)';
+  const pao1 = isSemGluten ? 'Tapioca de frigideira com chia (2 colheres de goma)' : 'Pão 100% integral artesanal (2 fatias)';
   const pao2 = isSemGluten ? 'Crepioca leve (1 ovo + 1 colher de polvilho/tapioca)' : 'Pão sírio integral com gergelim (1 unidade)';
 
-  // Cardápios únicos e distintos para cada um dos 7 dias da semana
   const cardapiosDias = {
     'Segunda-feira': {
       cafe_da_manha: [
@@ -356,189 +305,4 @@ export function generateDynamicClinicalPlan(paciente = {}) {
       refeicoes: cardapiosDias[dia] || cardapiosDias['Segunda-feira'],
     })),
   };
-}
-
-/**
- * Handler da Serverless Function /api/gerar-plano
- */
-export default async function handler(req, res) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
-  );
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Método não permitido. Use POST.' });
-  }
-
-  try {
-    const { paciente } = req.body || {};
-
-    if (!paciente || !paciente.nome) {
-      return res.status(400).json({ error: 'Dados do paciente incompletos ou ausentes.' });
-    }
-
-    const dadosPacienteFormatados = `
-- Nome: ${paciente.nome || 'Paciente'}
-- Data de Nascimento: ${paciente.data_nascimento || 'Não informada'}
-- Sexo: ${paciente.sexo || 'Não informado'}
-- Peso Inicial: ${paciente.peso_inicial ? `${paciente.peso_inicial} kg` : 'Não informado'}
-- Altura: ${paciente.altura ? `${paciente.altura} cm` : 'Não informada'}
-- Nível de Atividade: ${paciente.nivel_atividade || 'Moderado'}
-- Pratica Atividade Física: ${paciente.atividade_fisica ? `Sim (${paciente.atividade_fisica_descricao || 'Sem descrição'})` : 'Não'}
-- Objetivos: ${Array.isArray(paciente.objetivos) ? paciente.objetivos.join(', ') : (paciente.objetivo_texto || 'Melhorar saúde geral')}
-- Detalhes do Objetivo: ${paciente.objetivo_texto || 'Não detalhado'}
-- Patologias / Condições Clínicas: ${Array.isArray(paciente.patologias) && paciente.patologias.length > 0 ? paciente.patologias.join(', ') : 'Nenhuma'}
-- Restrições Alimentares: ${Array.isArray(paciente.restricoes_alimentares) && paciente.restricoes_alimentares.length > 0 ? paciente.restricoes_alimentares.join(', ') : 'Nenhuma'}
-- Alergias: ${Array.isArray(paciente.alergias) && paciente.alergias.length > 0 ? paciente.alergias.join(', ') : 'Nenhuma'}
-- Medicamentos em uso: ${paciente.medicamentos || 'Nenhum'}
-- Suplementos em uso: ${paciente.suplementos || 'Nenhum'}
-- Quantidade de Refeições por Dia: ${paciente.refeicoes_por_dia || 4}
-- Horário que Acorda: ${paciente.horario_acorda || '06:00'}
-- Horário que Dorme: ${paciente.horario_dorme || '22:30'}
-- Consumo de Água Atual: ${paciente.litros_agua ? `${paciente.litros_agua} Litros/dia` : 'Não informado'}
-- Observações adicionais: ${paciente.observacoes || 'Sem observações adicionais'}
-    `.trim();
-
-    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
-
-    if (!apiKey) {
-      console.warn('GOOGLE_API_KEY não configurada. Gerando plano estruturado via motor clínico dinâmico.');
-      const fallbackPlan = generateDynamicClinicalPlan(paciente);
-      return res.status(200).json({
-        success: true,
-        origem: 'motor_clinico_dinamico',
-        plano: fallbackPlan,
-        mensagem: 'Plano semanal dinâmico elaborado com base nas diretrizes clínicas do paciente.',
-      });
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-
-    const promptText = `
-Você é um nutricionista clínico profissional especialista na culinária e rotina brasileira.
-Gere um plano alimentar semanal completo, saudável e diversificado com base nos dados do paciente fornecidos abaixo.
-
-Dados do Paciente (Metas, Alergias, Restrições e Histórico):
-${dadosPacienteFormatados}
-
-# Regras Críticas de Execução:
-- Você deve responder APENAS e estritamente o objeto JSON solicitado.
-- Não inclua blocos de código markdown (como \`\`\`json ... \`\`\`), explicações, introduções ou textos complementares.
-- Adapte o cardápio rigorosamente a quaisquer alergias ou restrições descritas nos dados.
-- O cardápio DEVE SER COMPLETAMENTE DIFERENTE E VARIADO para cada um dos 7 dias da semana (Segunda a Domingo).
-- NÃO repita os mesmos alimentos nos dias seguidos. Crie variedade com alimentos comuns, acessíveis e culturalmente aceitos no Brasil.
-- Cada uma das 5 refeições de cada dia deve ter 5 opções práticas de alimentos ou pratos saudáveis brasileiros.
-
-O formato do JSON retornado deve seguir exatamente esta estrutura:
-{
-  "plano_semanal": [
-    {
-      "dia": "Segunda-feira",
-      "refeicoes": {
-        "cafe_da_manha": ["Opção 1", "Opção 2", "Opção 3", "Opção 4", "Opção 5"],
-        "lanche_manha": ["Opção 1", "Opção 2", "Opção 3", "Opção 4", "Opção 5"],
-        "almoco": ["Opção 1", "Opção 2", "Opção 3", "Opção 4", "Opção 5"],
-        "lanche_tarde": ["Opção 1", "Opção 2", "Opção 3", "Opção 4", "Opção 5"],
-        "jantar": ["Opção 1", "Opção 2", "Opção 3", "Opção 4", "Opção 5"]
-      }
-    },
-    { "dia": "Terça-feira", "refeicoes": { ... } },
-    { "dia": "Quarta-feira", "refeicoes": { ... } },
-    { "dia": "Quinta-feira", "refeicoes": { ... } },
-    { "dia": "Sexta-feira", "refeicoes": { ... } },
-    { "dia": "Sábado", "refeicoes": { ... } },
-    { "dia": "Domingo", "refeicoes": { ... } }
-  ]
-}
-    `.trim();
-
-    // Modelos suportados em ordem de preferência e velocidade
-    const modelCandidates = [
-      'gemini-3.5-flash',
-      'gemini-3.6-flash',
-      'gemini-3.1-flash-lite',
-      'gemini-3.5-flash-lite',
-      'gemini-flash-latest',
-    ];
-
-    let generatedText = null;
-    let lastError = null;
-
-    for (const modelName of modelCandidates) {
-      try {
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema: PLANO_SCHEMA,
-            temperature: 0.7,
-          },
-        });
-
-        const result = await model.generateContent(promptText);
-        const response = await result.response;
-        generatedText = response.text();
-        if (generatedText) {
-          console.log(`Sucesso gerando plano com modelo Gemini: ${modelName}`);
-          break;
-        }
-      } catch (err) {
-        console.warn(`Tentativa com modelo ${modelName} falhou (${err.message}). Tentando próximo...`);
-        lastError = err;
-      }
-    }
-
-    if (!generatedText) {
-      console.warn('Chamadas à API do Gemini esgotaram quota ou falharam. Utilizando gerador clínico dinâmico:', lastError?.message);
-      const fallbackPlan = generateDynamicClinicalPlan(paciente);
-      return res.status(200).json({
-        success: true,
-        origem: 'motor_clinico_dinamico',
-        plano: fallbackPlan,
-        aviso: 'O plano semanal foi gerado dinamicamente com base nas diretrizes clínicas e objetivos do paciente.',
-      });
-    }
-
-    // Tratamento e validação do JSON retornado pelo Gemini
-    let parsedPlan = null;
-    try {
-      const cleaned = generatedText.replace(/```json/gi, '').replace(/```/g, '').trim();
-      parsedPlan = JSON.parse(cleaned);
-      if (!Array.isArray(parsedPlan?.plano_semanal) || parsedPlan.plano_semanal.length === 0) {
-        throw new Error('Formato do JSON gerado não contém array plano_semanal válido.');
-      }
-    } catch (parseError) {
-      console.error('Erro ao analisar JSON retornado pelo Gemini:', parseError, generatedText);
-      const fallbackPlan = generateDynamicClinicalPlan(paciente);
-      return res.status(200).json({
-        success: true,
-        origem: 'motor_clinico_dinamico',
-        plano: fallbackPlan,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      origem: 'gemini_ia',
-      plano: parsedPlan,
-    });
-  } catch (error) {
-    console.error('Erro no servidor /api/gerar-plano:', error);
-    const fallbackPlan = generateDynamicClinicalPlan(req?.body?.paciente || {});
-    return res.status(200).json({
-      success: true,
-      origem: 'motor_clinico_dinamico',
-      plano: fallbackPlan,
-      aviso: 'Plano semanal gerado com sucesso.',
-    });
-  }
 }

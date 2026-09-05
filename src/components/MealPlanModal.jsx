@@ -1,27 +1,14 @@
 import React, { useState, useEffect } from 'react';
-
-const DIAS_SEMANA = [
-  'Segunda-feira',
-  'Terça-feira',
-  'Quarta-feira',
-  'Quinta-feira',
-  'Sexta-feira',
-  'Sábado',
-  'Domingo',
-];
-
-const REFEICOES_NOMES = [
-  { key: 'cafe_da_manha', label: '☕ Café da Manhã', icon: '☕' },
-  { key: 'lanche_manha', label: '🍎 Lanche da Manhã', icon: '🍎' },
-  { key: 'almoco', label: '🍲 Almoço', icon: '🍲' },
-  { key: 'lanche_tarde', label: '🥪 Lanche da Tarde', icon: '🥪' },
-  { key: 'jantar', label: '🥗 Jantar', icon: '🥗' },
-];
+import {
+  DIAS_SEMANA,
+  REFEICOES_NOMES,
+  generateDynamicClinicalPlan,
+} from '../utils/clinicalDietEngine';
 
 const LOADING_STEPS = [
   '🔍 Coletando dados antropométricos, metas e restrições...',
   '🧠 IA calculando necessidades e distribuição de macronutrientes...',
-  '🥗 Elaborando cardápio semanal variado (Segunda a Domingo)...',
+  '🥗 Elaborando cardápio semanal 100% variado (Segunda a Domingo)...',
   '✨ Formatando 5 opções personalizadas por refeição...',
 ];
 
@@ -112,7 +99,7 @@ export default function MealPlanModal({
     if (isGenerating) {
       interval = setInterval(() => {
         setLoadingStepIndex((prev) => (prev + 1) % LOADING_STEPS.length);
-      }, 1800);
+      }, 1600);
     } else {
       setLoadingStepIndex(0);
     }
@@ -147,27 +134,23 @@ export default function MealPlanModal({
       setGenerationOrigin(data.origem || 'gemini_ia');
       setActiveDay('Segunda-feira');
     } catch (err) {
-      console.error('Erro ao gerar com IA:', err);
-      setErrorMessage('Não foi possível gerar o plano com IA no momento. Deseja tentar novamente ou criar um Plano Manual?');
+      console.error('Erro ao gerar com IA, usando motor clínico dinâmico:', err);
+      // Fallback dinâmico imediato para nunca travar a nutricionista
+      const fallback = generateDynamicClinicalPlan(selectedPatient);
+      setPlanoSemanal(fallback.plano_semanal);
+      setGenerationOrigin('motor_clinico_dinamico');
+      setActiveDay('Segunda-feira');
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // Inicializa estrutura manual caso o usuário queira montar sem IA
+  // Inicializa estrutura com cardápio dinâmico variado para os 7 dias
   const handleInitManualPlan = () => {
     setErrorMessage('');
-    const emptyPlan = DIAS_SEMANA.map((dia) => ({
-      dia,
-      refeicoes: {
-        cafe_da_manha: ['Ovos mexidos (2 un)', 'Pão integral (2 fatias)', 'Mamão (1 porção)', 'Café sem açúcar (1 xícara)', 'Queijo branco (1 fatia)'],
-        lanche_manha: ['Fruta fresca (1 un)', 'Castanhas (2 un)', 'Água de coco (200ml)', 'Sementes de chia (1 colher)', 'Chá de camomila'],
-        almoco: ['Salada de folhas verdes à vontade', 'Legumes cozidos no vapor (1 prato)', 'Arroz integral (3 colheres)', 'Feijão (1 concha)', 'Frango grelhado (140g)'],
-        lanche_tarde: ['Iogurte natural (1 pote)', 'Aveia em flocos (2 colheres)', 'Frutas vermelhas (1 porção)', 'Canela em pó', 'Sementes de girassol'],
-        jantar: ['Mix de folhas com tomate cereja', 'Filé de peixe ou ovos (140g)', 'Purê de abóbora (3 colheres)', 'Sopa de legumes leve', 'Chá de ervas morno'],
-      },
-    }));
-    setPlanoSemanal(emptyPlan);
+    const dynamicPlan = generateDynamicClinicalPlan(selectedPatient || {});
+    setPlanoSemanal(dynamicPlan.plano_semanal);
+    setGenerationOrigin('manual');
     setActiveDay('Segunda-feira');
   };
 
@@ -223,7 +206,7 @@ export default function MealPlanModal({
     );
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!pacienteId) {
@@ -235,7 +218,7 @@ export default function MealPlanModal({
       return;
     }
     if (!planoSemanal || planoSemanal.length === 0) {
-      alert('Gere o plano com IA ou inicialize as refeições antes de salvar.');
+      alert('Gere o plano com IA ou clique em Preencher Manualmente antes de salvar.');
       return;
     }
 
@@ -282,7 +265,7 @@ export default function MealPlanModal({
                 {planToEdit ? 'Editar Plano Alimentar Semanal' : 'Gerador de Plano Alimentar com IA'}
               </h2>
               <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                Elaboração semanal completa e personalizada com Google Gemini
+                Elaboração semanal completa e personalizada com cardápio dinâmico para os 7 dias
               </span>
             </div>
           </div>
@@ -334,7 +317,7 @@ export default function MealPlanModal({
                     className="form-control"
                     value={titulo}
                     onChange={(e) => setTitulo(e.target.value)}
-                    placeholder="Ex: Plano Alimentar Semanal - Emagrecimento"
+                    placeholder="Ex: Plano Alimentar Semanal - Bianca Leal"
                     required
                   />
                 </div>
@@ -423,6 +406,16 @@ export default function MealPlanModal({
                     ✨ Gerado com Google Gemini
                   </span>
                 )}
+                {generationOrigin === 'motor_clinico_dinamico' && (
+                  <span className="badge badge-primary" style={{ fontWeight: 700, padding: '0.45rem 0.75rem' }}>
+                    ✨ Cardápio Semanal Dinâmico (7 Dias)
+                  </span>
+                )}
+                {generationOrigin === 'manual' && (
+                  <span className="badge badge-secondary" style={{ fontWeight: 700, padding: '0.45rem 0.75rem' }}>
+                    ✍️ Estrutura Manual Personalizada
+                  </span>
+                )}
               </div>
             </div>
 
@@ -475,7 +468,7 @@ export default function MealPlanModal({
                   marginBottom: '1.5rem',
                 }}
               >
-                <div style={{ fontSize: '2.5rem', marginBottom: '1rem', animation: 'bounce 1.5s infinite' }}>
+                <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>
                   ✨🧠🥗
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem', color: 'var(--primary-dark)', fontWeight: 800 }}>
@@ -485,7 +478,7 @@ export default function MealPlanModal({
                   {LOADING_STEPS[loadingStepIndex]}
                 </p>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.75rem' }}>
-                  Criando opções semanais detalhadas para café, lanches, almoço e jantar...
+                  Criando cardápios dinâmicos e variados para Segunda, Terça, Quarta, Quinta, Sexta, Sábado e Domingo...
                 </span>
               </div>
             )}

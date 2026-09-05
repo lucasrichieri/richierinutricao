@@ -103,6 +103,9 @@ export async function initDatabaseSchema(sql) {
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `;
+    await sql`
+      ALTER TABLE planos_alimentares ADD COLUMN IF NOT EXISTS titulo TEXT;
+    `;
 
     console.log('Schema Neon verificado com sucesso.');
   } catch (err) {
@@ -851,22 +854,64 @@ export async function createPlanoAlimentar(sql, planoData) {
 
   if (sql) {
     try {
-      const conteudoJson = typeof planoData.conteudo === 'string' ? planoData.conteudo : JSON.stringify(planoData.conteudo);
-      const inserted = await sql`
-        INSERT INTO planos_alimentares (
-          paciente_id, titulo, conteudo
-        ) VALUES (
-          ${planoData.paciente_id}::uuid, ${planoData.titulo || 'Plano Alimentar'}, ${conteudoJson}::jsonb
-        ) RETURNING *
-      `;
+      const conteudoObj = typeof planoData.conteudo === 'string' ? JSON.parse(planoData.conteudo) : (planoData.conteudo || {});
+      if (planoData.titulo && !conteudoObj.titulo) {
+        conteudoObj.titulo = planoData.titulo;
+      }
+      const conteudoJson = JSON.stringify(conteudoObj);
+      const isUUID = planoData.paciente_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(planoData.paciente_id);
+
+      let inserted = null;
+      try {
+        if (isUUID) {
+          inserted = await sql`
+            INSERT INTO planos_alimentares (
+              paciente_id, titulo, conteudo
+            ) VALUES (
+              ${planoData.paciente_id}::uuid, ${planoData.titulo || 'Plano Alimentar Semanal'}, ${conteudoJson}::jsonb
+            ) RETURNING *
+          `;
+        } else {
+          inserted = await sql`
+            INSERT INTO planos_alimentares (
+              paciente_id, titulo, conteudo
+            ) VALUES (
+              ${planoData.paciente_id}, ${planoData.titulo || 'Plano Alimentar Semanal'}, ${conteudoJson}::jsonb
+            ) RETURNING *
+          `;
+        }
+      } catch (colErr) {
+        console.warn('Tentativa com coluna titulo falhou, inserindo apenas paciente_id e conteudo:', colErr.message);
+        if (isUUID) {
+          inserted = await sql`
+            INSERT INTO planos_alimentares (
+              paciente_id, conteudo
+            ) VALUES (
+              ${planoData.paciente_id}::uuid, ${conteudoJson}::jsonb
+            ) RETURNING *
+          `;
+        } else {
+          inserted = await sql`
+            INSERT INTO planos_alimentares (
+              paciente_id, conteudo
+            ) VALUES (
+              ${planoData.paciente_id}, ${conteudoJson}::jsonb
+            ) RETURNING *
+          `;
+        }
+      }
+
       if (inserted && inserted[0]) {
-        const finalPlano = inserted[0];
+        const finalPlano = {
+          ...inserted[0],
+          titulo: inserted[0].titulo || planoData.titulo || conteudoObj.titulo || 'Plano Alimentar Semanal',
+        };
         const syncList = updated.map(p => (p.id === id ? finalPlano : p));
         setLocalData(STORAGE_KEYS.PLANOS, syncList);
         return finalPlano;
       }
     } catch (err) {
-      console.warn('Erro ao inserir plano alimentar no Neon:', err.message);
+      console.error('Erro ao inserir plano alimentar no Neon:', err);
       throw err;
     }
   }
@@ -881,15 +926,46 @@ export async function updatePlanoAlimentar(sql, planoId, planoData) {
 
   if (sql) {
     try {
-      const conteudoJson = typeof planoData.conteudo === 'string' ? planoData.conteudo : JSON.stringify(planoData.conteudo);
-      await sql`
-        UPDATE planos_alimentares SET
-          titulo = ${planoData.titulo || 'Plano Alimentar'},
-          conteudo = ${conteudoJson}::jsonb
-        WHERE id = ${planoId}::uuid
-      `;
+      const conteudoObj = typeof planoData.conteudo === 'string' ? JSON.parse(planoData.conteudo) : (planoData.conteudo || {});
+      if (planoData.titulo && !conteudoObj.titulo) {
+        conteudoObj.titulo = planoData.titulo;
+      }
+      const conteudoJson = JSON.stringify(conteudoObj);
+      const isUUID = planoId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(planoId);
+
+      try {
+        if (isUUID) {
+          await sql`
+            UPDATE planos_alimentares SET
+              titulo = ${planoData.titulo || 'Plano Alimentar Semanal'},
+              conteudo = ${conteudoJson}::jsonb
+            WHERE id = ${planoId}::uuid
+          `;
+        } else {
+          await sql`
+            UPDATE planos_alimentares SET
+              titulo = ${planoData.titulo || 'Plano Alimentar Semanal'},
+              conteudo = ${conteudoJson}::jsonb
+            WHERE id = ${planoId}
+          `;
+        }
+      } catch (colErr) {
+        if (isUUID) {
+          await sql`
+            UPDATE planos_alimentares SET
+              conteudo = ${conteudoJson}::jsonb
+            WHERE id = ${planoId}::uuid
+          `;
+        } else {
+          await sql`
+            UPDATE planos_alimentares SET
+              conteudo = ${conteudoJson}::jsonb
+            WHERE id = ${planoId}
+          `;
+        }
+      }
     } catch (err) {
-      console.warn('Erro ao atualizar plano alimentar no Neon:', err.message);
+      console.error('Erro ao atualizar plano alimentar no Neon:', err);
       throw err;
     }
   }
@@ -902,10 +978,16 @@ export async function deletePlanoAlimentar(sql, planoId) {
 
   if (sql) {
     try {
-      await sql`DELETE FROM planos_alimentares WHERE id = ${planoId}::uuid`;
+      const isUUID = planoId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(planoId);
+      if (isUUID) {
+        await sql`DELETE FROM planos_alimentares WHERE id = ${planoId}::uuid`;
+      } else {
+        await sql`DELETE FROM planos_alimentares WHERE id = ${planoId}`;
+      }
     } catch (err) {
       console.warn('Erro ao excluir plano alimentar no Neon:', err.message);
     }
   }
   return true;
 }
+

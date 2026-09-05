@@ -309,12 +309,19 @@ export default function Dashboard() {
 
   const handleSaveMealPlan = async (formData) => {
     try {
-      await createPlanoAlimentar(sql, formData);
-      addToast('Plano alimentar salvo com sucesso!', 'success');
+      if (editingPlan && editingPlan.id) {
+        await updatePlanoAlimentar(sql, editingPlan.id, formData);
+        addToast('Plano alimentar atualizado com sucesso!', 'success');
+      } else {
+        await createPlanoAlimentar(sql, formData);
+        addToast('Plano alimentar salvo com sucesso!', 'success');
+      }
       setMealPlanModalOpen(false);
-      loadData();
+      setEditingPlan(null);
+      await loadData();
     } catch (err) {
-      addToast('Erro ao salvar plano alimentar', 'error');
+      console.error('Erro ao salvar plano alimentar:', err);
+      addToast(`Erro ao salvar plano alimentar: ${err.message || 'Erro inesperado'}`, 'error');
     }
   };
 
