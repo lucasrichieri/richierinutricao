@@ -1315,14 +1315,22 @@ export default function PatientProfileView({
               </div>
             </div>
 
-            {/* Botão Gerar Plano Alimentar em destaque (Prompt 5) */}
+            {/* Botão Gerar Plano Alimentar com IA em destaque (Prompt 6) */}
             <button
               type="button"
               className="btn btn-primary"
               onClick={() => onOpenNewMealPlan(patient.id)}
-              style={{ fontWeight: 800, padding: '0.6rem 1.25rem' }}
+              style={{
+                background: 'linear-gradient(135deg, #15803D 0%, #047857 50%, #065F46 100%)',
+                boxShadow: '0 4px 12px rgba(21, 128, 61, 0.25)',
+                fontWeight: 800,
+                padding: '0.65rem 1.35rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+              }}
             >
-              🥗 Gerar Plano Alimentar
+              <span>✨</span> Gerar Plano com IA
             </button>
           </div>
 
@@ -1330,26 +1338,34 @@ export default function PatientProfileView({
             {patientMealPlans.length === 0 ? (
               <div style={{ padding: '3rem 1.5rem', textAlign: 'center' }}>
                 <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '0.5rem', opacity: 0.7 }}>
-                  🥗
+                  ✨🥗
                 </span>
                 <h4 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.05rem', fontWeight: 700 }}>
                   Nenhum plano alimentar gerado ainda
                 </h4>
                 <p style={{ margin: '0.35rem 0 1.25rem', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
-                  Clique no botão abaixo para prescrever e gerar o plano alimentar personalizado do paciente.
+                  Clique no botão abaixo para prescrever e gerar o plano alimentar semanal personalizado com IA.
                 </p>
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
                   onClick={() => onOpenNewMealPlan(patient.id)}
+                  style={{
+                    background: 'linear-gradient(135deg, #15803D 0%, #047857 100%)',
+                    fontWeight: 700,
+                    padding: '0.55rem 1.2rem',
+                  }}
                 >
-                  🥗 Gerar Primeiro Plano Alimentar
+                  ✨ Gerar Primeiro Plano com IA
                 </button>
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
                 {patientMealPlans.map((plano) => {
-                  const meals = Array.isArray(plano.refeicoes) ? plano.refeicoes : [];
+                  const conteudo = typeof plano.conteudo === 'string' ? JSON.parse(plano.conteudo) : plano.conteudo;
+                  const isWeekly = Array.isArray(conteudo?.plano_semanal);
+                  const isAI = conteudo?.gerado_com_ia || isWeekly;
+
                   return (
                     <div
                       key={plano.id}
@@ -1371,8 +1387,8 @@ export default function PatientProfileView({
                           <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--primary-dark)' }}>
                             {plano.titulo || 'Plano Alimentar'}
                           </h4>
-                          <span className="badge badge-primary">
-                            {meals.length} {meals.length === 1 ? 'refeição' : 'refeições'}
+                          <span className={`badge ${isAI ? 'badge-primary' : 'badge-neutral'}`} style={{ fontWeight: 700 }}>
+                            {isAI ? '✨ Plano IA (7 dias)' : '🥗 Plano Padrão'}
                           </span>
                         </div>
 
@@ -1380,9 +1396,11 @@ export default function PatientProfileView({
                           📅 Gerado em: {new Date(plano.created_at || Date.now()).toLocaleDateString('pt-BR')}
                         </span>
 
-                        {plano.observacoes && (
+                        {conteudo?.orientacoes_gerais && (
                           <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', margin: 0, lineHeight: 1.4 }}>
-                            {plano.observacoes.length > 100 ? `${plano.observacoes.substring(0, 100)}...` : plano.observacoes}
+                            {conteudo.orientacoes_gerais.length > 100
+                              ? `${conteudo.orientacoes_gerais.substring(0, 100)}...`
+                              : conteudo.orientacoes_gerais}
                           </p>
                         )}
                       </div>
