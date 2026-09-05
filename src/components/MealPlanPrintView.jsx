@@ -280,9 +280,6 @@ export default function MealPlanPrintView({
                 <>📥 Baixar Arquivo PDF no PC</>
               )}
             </button>
-            <button type="button" className="btn btn-secondary" onClick={handlePrint} style={{ fontWeight: 600 }}>
-              🖨️ Imprimir
-            </button>
             <button type="button" className="modal-close-btn" onClick={onClose} style={{ fontSize: '1.4rem' }}>
               &times;
             </button>
@@ -688,35 +685,30 @@ export default function MealPlanPrintView({
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Fechar
           </button>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={handleDownloadPDF}
-              disabled={isDownloadingPdf}
-              style={{
-                fontWeight: 800,
-                background: 'linear-gradient(135deg, #15803D 0%, #047857 100%)',
-                boxShadow: '0 2px 8px rgba(21, 128, 61, 0.3)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.45rem',
-                padding: '0.55rem 1.25rem',
-              }}
-            >
-              {isDownloadingPdf ? (
-                <>
-                  <span className="spinner" style={{ width: '14px', height: '14px', border: '2px solid #FFF', borderTopColor: 'transparent' }}></span>
-                  Gerando PDF...
-                </>
-              ) : (
-                <>📥 Baixar Arquivo PDF no PC</>
-              )}
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={handlePrint} style={{ fontWeight: 600 }}>
-              🖨️ Imprimir
-            </button>
-          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleDownloadPDF}
+            disabled={isDownloadingPdf}
+            style={{
+              fontWeight: 800,
+              background: 'linear-gradient(135deg, #15803D 0%, #047857 100%)',
+              boxShadow: '0 2px 8px rgba(21, 128, 61, 0.3)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              padding: '0.55rem 1.25rem',
+            }}
+          >
+            {isDownloadingPdf ? (
+              <>
+                <span className="spinner" style={{ width: '14px', height: '14px', border: '2px solid #FFF', borderTopColor: 'transparent' }}></span>
+                Gerando PDF...
+              </>
+            ) : (
+              <>📥 Baixar Arquivo PDF no PC</>
+            )}
+          </button>
         </div>
       </div>
     </div>

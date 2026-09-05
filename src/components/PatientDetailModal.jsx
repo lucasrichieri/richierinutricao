@@ -385,7 +385,7 @@ export default function PatientDetailModal({
                             className="btn btn-outline-primary btn-sm"
                             onClick={() => onViewMealPlan(plano)}
                           >
-                            👁️ Ver & Imprimir
+                            👁️ Ver & Baixar PDF
                           </button>
                         </div>
                       </div>

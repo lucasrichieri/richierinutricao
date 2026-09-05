@@ -1139,7 +1139,7 @@ export default function Dashboard() {
                                 style={{ flex: 1 }}
                                 onClick={() => handleViewMealPlan(plano)}
                               >
-                                🖨️ Ver & Imprimir
+                                📥 Ver & Baixar PDF
                               </button>
                               <button
                                 className="btn btn-danger-subtle btn-sm btn-icon"

@@ -1412,7 +1412,7 @@ export default function PatientProfileView({
                           onClick={() => onViewMealPlan(plano)}
                           style={{ width: '100%', fontWeight: 700 }}
                         >
-                          👁️ Ver & Imprimir Plano
+                          👁️ Ver & Baixar PDF
                         </button>
                       </div>
                     </div>
