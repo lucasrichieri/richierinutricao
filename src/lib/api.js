@@ -10,7 +10,8 @@ const STORAGE_KEYS = {
 // Helper de LocalStorage para resiliência e cache
 function getLocalData(key, fallback = []) {
   try {
-    const data = localStorage.getItem(key);
+    if (typeof window === 'undefined' || !window.localStorage) return fallback;
+    const data = window.localStorage.getItem(key);
     return data ? JSON.parse(data) : fallback;
   } catch (e) {
     return fallback;
@@ -19,7 +20,8 @@ function getLocalData(key, fallback = []) {
 
 function setLocalData(key, data) {
   try {
-    localStorage.setItem(key, JSON.stringify(data));
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    window.localStorage.setItem(key, JSON.stringify(data));
   } catch (e) {
     console.error('Erro ao salvar no cache local:', e);
   }
@@ -128,20 +130,29 @@ export async function getPerfilNutricionista(sql, user) {
   }
 
   try {
-    // Buscar por ID ou email
-    const rows = await sql`
-      SELECT * FROM nutricionistas WHERE id = ${user.id} OR email = ${user.email} LIMIT 1
-    `;
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(user.id);
+    let rows;
+
+    if (isUUID) {
+      rows = await sql`
+        SELECT * FROM nutricionistas WHERE id = ${user.id}::uuid OR email = ${user.email} LIMIT 1
+      `;
+    } else {
+      rows = await sql`
+        SELECT * FROM nutricionistas WHERE email = ${user.email} LIMIT 1
+      `;
+    }
+
     if (rows && rows.length > 0) {
       const perfil = rows[0];
       setLocalData(STORAGE_KEYS.PERFIL, perfil);
       return perfil;
     } else {
-      // Cria registro se não existir, usando ON CONFLICT para evitar duplicatas
+      // Cria registro do nutricionista caso ainda não exista
       const inserted = await sql`
         INSERT INTO nutricionistas (id, nome, email)
-        VALUES (${user.id}, ${user.name || 'Nutricionista'}, ${user.email})
-        ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome, email = EXCLUDED.email
+        VALUES (${isUUID ? user.id : null}::uuid, ${user.name || 'Nutricionista'}, ${user.email})
+        ON CONFLICT (email) DO UPDATE SET nome = EXCLUDED.nome
         RETURNING *
       `;
       if (inserted && inserted.length > 0) {
@@ -171,7 +182,7 @@ export async function updatePerfilNutricionista(sql, user, data) {
     try {
       await sql`
         UPDATE nutricionistas
-        SET nome = ${data.nome}, crn = ${data.crn}, telefone = ${data.telefone}
+        SET nome = ${data.nome}, crn = ${data.crn || null}, telefone = ${data.telefone || null}
         WHERE email = ${user.email}
       `;
     } catch (err) {
@@ -193,10 +204,12 @@ export async function getPacientes(sql, nutricionistaId = null) {
 
   try {
     let rows;
-    if (nutricionistaId) {
+    const isUUID = nutricionistaId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(nutricionistaId);
+
+    if (isUUID) {
       rows = await sql`
         SELECT * FROM pacientes 
-        WHERE nutricionista_id = ${nutricionistaId} OR nutricionista_id IS NULL 
+        WHERE nutricionista_id = ${nutricionistaId}::uuid OR nutricionista_id IS NULL 
         ORDER BY created_at DESC
       `;
     } else {
@@ -204,9 +217,23 @@ export async function getPacientes(sql, nutricionistaId = null) {
         SELECT * FROM pacientes ORDER BY created_at DESC
       `;
     }
+
     if (rows) {
-      setLocalData(STORAGE_KEYS.PACIENTES, rows);
-      return rows;
+      // Preserva pacientes do cache local que ainda não foram sincronizados para não deletá-los
+      const rowIds = new Set(rows.map(r => String(r.id)));
+      const rowEmails = new Set(rows.filter(r => r.email).map(r => r.email.toLowerCase()));
+      const rowNames = new Set(rows.map(r => r.nome.trim().toLowerCase()));
+
+      const unsynced = local.filter(p => {
+        if (rowIds.has(String(p.id))) return false;
+        if (p.email && rowEmails.has(p.email.toLowerCase())) return false;
+        if (p.nome && rowNames.has(p.nome.trim().toLowerCase())) return false;
+        return true;
+      });
+
+      const merged = [...rows, ...unsynced];
+      setLocalData(STORAGE_KEYS.PACIENTES, merged);
+      return merged;
     }
   } catch (err) {
     console.warn('Falha ao buscar pacientes do Neon, usando cache:', err.message);
@@ -224,14 +251,22 @@ export async function syncLocalPacientesToNeon(sql, nutricionistaId = null) {
 
   try {
     for (const p of local) {
-      if (!p.nome) continue;
-      // Verifica se o paciente já existe no Neon DB
-      const existing = await sql`
-        SELECT id FROM pacientes 
-        WHERE (email IS NOT NULL AND email = ${p.email || ''}) 
-           OR (nome = ${p.nome} AND (nutricionista_id = ${nutricionistaId || null} OR nutricionista_id IS NULL))
-        LIMIT 1
-      `;
+      if (!p.nome || !p.nome.trim()) continue;
+
+      let existing = [];
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(p.id);
+
+      if (isUUID) {
+        existing = await sql`SELECT id FROM pacientes WHERE id = ${p.id}::uuid LIMIT 1`;
+      }
+      if (!existing || existing.length === 0) {
+        existing = await sql`
+          SELECT id FROM pacientes 
+          WHERE (email IS NOT NULL AND email != '' AND email = ${p.email || ''}) 
+             OR (nome = ${p.nome.trim()} AND (nutricionista_id = ${nutricionistaId || null}::uuid OR nutricionista_id IS NULL))
+          LIMIT 1
+        `;
+      }
 
       if (!existing || existing.length === 0) {
         const peso = p.peso_inicial && !isNaN(parseFloat(p.peso_inicial)) ? parseFloat(p.peso_inicial) : null;
@@ -242,8 +277,11 @@ export async function syncLocalPacientesToNeon(sql, nutricionistaId = null) {
         const pat = Array.isArray(p.patologias) ? p.patologias : [];
         const rest = Array.isArray(p.restricoes_alimentares) ? p.restricoes_alimentares : [];
         const alerg = Array.isArray(p.alergias) ? p.alergias : [];
+        const nutIdParam = nutricionistaId || (isUUID && p.nutricionista_id ? p.nutricionista_id : null);
 
-        await sql`
+        const isNutUUID = nutIdParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(nutIdParam);
+
+        const inserted = await sql`
           INSERT INTO pacientes (
             nutricionista_id, nome, data_nascimento, sexo, whatsapp, email,
             peso_inicial, altura, objetivos, objetivo_texto,
@@ -251,7 +289,7 @@ export async function syncLocalPacientesToNeon(sql, nutricionistaId = null) {
             medicamentos, suplementos, refeicoes_por_dia, horario_acorda,
             horario_dorme, litros_agua, atividade_fisica, atividade_fisica_descricao, observacoes
           ) VALUES (
-            ${nutricionistaId || null}, ${p.nome}, ${p.data_nascimento || null}, ${p.sexo || null},
+            ${isNutUUID ? String(nutIdParam) : null}::uuid, ${p.nome.trim()}, ${p.data_nascimento || null}, ${p.sexo || null},
             ${p.whatsapp || p.telefone || null}, ${p.email || null}, ${peso},
             ${alt}, ${objs}, ${p.objetivo_texto || null},
             ${p.nivel_atividade || null}, ${pat}, ${rest},
@@ -259,9 +297,11 @@ export async function syncLocalPacientesToNeon(sql, nutricionistaId = null) {
             ${mef}, ${p.horario_acorda || null}, ${p.horario_dorme || null},
             ${agua}, ${Boolean(p.atividade_fisica)}, ${p.atividade_fisica_descricao || null},
             ${p.observacoes || null}
-          )
+          ) RETURNING *
         `;
-        console.log('Paciente do cache sincronizado com sucesso para o Neon DB:', p.nome);
+        if (inserted && inserted[0]) {
+          console.log('Paciente do cache sincronizado com sucesso para o Neon DB:', inserted[0].nome);
+        }
       }
     }
   } catch (err) {
@@ -296,7 +336,7 @@ export async function createPaciente(sql, pacienteData, nutricionistaId = null) 
   const rest = Array.isArray(pacienteData.restricoes_alimentares) ? pacienteData.restricoes_alimentares : [];
   const alerg = Array.isArray(pacienteData.alergias) ? pacienteData.alergias : [];
 
-  const newPatient = {
+  let newPatient = {
     id,
     nutricionista_id: nutricionistaId,
     ...pacienteData,
@@ -311,13 +351,15 @@ export async function createPaciente(sql, pacienteData, nutricionistaId = null) 
     created_at: now,
   };
 
-  // Salva no cache local
+  // Salva no cache local preventivamente
   const current = getLocalData(STORAGE_KEYS.PACIENTES, []);
   const updated = [newPatient, ...current];
   setLocalData(STORAGE_KEYS.PACIENTES, updated);
 
   if (sql) {
     try {
+      const isNutUUID = nutricionistaId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(nutricionistaId);
+
       const inserted = await sql`
         INSERT INTO pacientes (
           nutricionista_id, nome, data_nascimento, sexo, whatsapp, email,
@@ -326,7 +368,7 @@ export async function createPaciente(sql, pacienteData, nutricionistaId = null) 
           medicamentos, suplementos, refeicoes_por_dia, horario_acorda,
           horario_dorme, litros_agua, atividade_fisica, atividade_fisica_descricao, observacoes
         ) VALUES (
-          ${nutricionistaId || null}, ${pacienteData.nome}, ${dataNascimento}, ${sx},
+          ${isNutUUID ? String(nutricionistaId) : null}::uuid, ${pacienteData.nome.trim()}, ${dataNascimento}, ${sx},
           ${wpp}, ${em}, ${peso},
           ${alt}, ${objs}, ${objTexto},
           ${nivelAtiv}, ${pat}, ${rest},
@@ -345,6 +387,7 @@ export async function createPaciente(sql, pacienteData, nutricionistaId = null) 
       }
     } catch (err) {
       console.error('Erro ao inserir paciente no Neon DB:', err);
+      throw err;
     }
   }
 
@@ -394,45 +437,48 @@ export async function updatePaciente(sql, pacienteId, pacienteData) {
       if (!isUUID) {
         const found = await sql`
           SELECT id FROM pacientes 
-          WHERE (email IS NOT NULL AND email = ${em || ''}) OR nome = ${pacienteData.nome || ''} 
+          WHERE (email IS NOT NULL AND email != '' AND email = ${em || ''}) OR nome = ${pacienteData.nome || ''} 
           LIMIT 1
         `;
         if (found && found[0]) targetId = found[0].id;
       }
 
-      const res = await sql`
-        UPDATE pacientes SET
-          nome = ${pacienteData.nome},
-          data_nascimento = ${dataNascimento},
-          sexo = ${sx},
-          whatsapp = ${wpp},
-          email = ${em},
-          peso_inicial = ${peso},
-          altura = ${alt},
-          objetivos = ${objs},
-          objetivo_texto = ${objTexto},
-          nivel_atividade = ${nivelAtiv},
-          patologias = ${pat},
-          restricoes_alimentares = ${rest},
-          alergias = ${alerg},
-          medicamentos = ${med},
-          suplementos = ${sup},
-          refeicoes_por_dia = ${mef},
-          horario_acorda = ${horAcorda},
-          horario_dorme = ${horDorme},
-          litros_agua = ${agua},
-          atividade_fisica = ${Boolean(pacienteData.atividade_fisica)},
-          atividade_fisica_descricao = ${atvDesc},
-          observacoes = ${obs}
-        WHERE id = ${targetId}::uuid
-        RETURNING *
-      `;
-      if (res && res[0]) {
-        updatedRecord = res[0];
-        console.log('Paciente atualizado com sucesso no Neon DB:', updatedRecord.id);
+      if (targetId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(targetId)) {
+        const res = await sql`
+          UPDATE pacientes SET
+            nome = ${pacienteData.nome.trim()},
+            data_nascimento = ${dataNascimento},
+            sexo = ${sx},
+            whatsapp = ${wpp},
+            email = ${em},
+            peso_inicial = ${peso},
+            altura = ${alt},
+            objetivos = ${objs},
+            objetivo_texto = ${objTexto},
+            nivel_atividade = ${nivelAtiv},
+            patologias = ${pat},
+            restricoes_alimentares = ${rest},
+            alergias = ${alerg},
+            medicamentos = ${med},
+            suplementos = ${sup},
+            refeicoes_por_dia = ${mef},
+            horario_acorda = ${horAcorda},
+            horario_dorme = ${horDorme},
+            litros_agua = ${agua},
+            atividade_fisica = ${Boolean(pacienteData.atividade_fisica)},
+            atividade_fisica_descricao = ${atvDesc},
+            observacoes = ${obs}
+          WHERE id = ${targetId}::uuid
+          RETURNING *
+        `;
+        if (res && res[0]) {
+          updatedRecord = res[0];
+          console.log('Paciente atualizado com sucesso no Neon DB:', updatedRecord.id);
+        }
       }
     } catch (err) {
       console.error('Erro ao atualizar paciente no Neon DB:', err);
+      throw err;
     }
   }
 
@@ -467,10 +513,9 @@ export async function deletePaciente(sql, pacienteId, pacienteEmail = null, paci
 
       let targetId = pacienteId;
       if (!isUUID) {
-        // Se o ID não for UUID (ex: criado offline), busca o UUID real no Neon DB
         const found = await sql`
           SELECT id FROM pacientes 
-          WHERE (email IS NOT NULL AND email = ${pacienteEmail || ''}) 
+          WHERE (email IS NOT NULL AND email != '' AND email = ${pacienteEmail || ''}) 
              OR nome = ${pacienteNome || ''} 
           LIMIT 1
         `;
@@ -479,7 +524,7 @@ export async function deletePaciente(sql, pacienteId, pacienteEmail = null, paci
         }
       }
 
-      if (targetId) {
+      if (targetId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(targetId)) {
         await sql`DELETE FROM planos_alimentares WHERE paciente_id = ${targetId}::uuid`;
         await sql`DELETE FROM consultas WHERE paciente_id = ${targetId}::uuid`;
         await sql`DELETE FROM pacientes WHERE id = ${targetId}::uuid`;
@@ -504,7 +549,13 @@ export async function getConsultas(sql, pacienteId = null) {
 
   try {
     let rows;
-    if (pacienteId) {
+    const isUUID = pacienteId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(pacienteId);
+
+    if (isUUID) {
+      rows = await sql`
+        SELECT * FROM consultas WHERE paciente_id = ${pacienteId}::uuid ORDER BY data_consulta DESC
+      `;
+    } else if (pacienteId) {
       rows = await sql`
         SELECT * FROM consultas WHERE paciente_id = ${pacienteId} ORDER BY data_consulta DESC
       `;
@@ -516,8 +567,15 @@ export async function getConsultas(sql, pacienteId = null) {
         ORDER BY c.data_consulta DESC
       `;
     }
+
     if (rows) {
-      if (!pacienteId) setLocalData(STORAGE_KEYS.CONSULTAS, rows);
+      if (!pacienteId) {
+        const rowIds = new Set(rows.map(r => String(r.id)));
+        const unsynced = local.filter(c => !rowIds.has(String(c.id)) && (!c.id || c.id.startsWith('cons_')));
+        const merged = [...rows, ...unsynced];
+        setLocalData(STORAGE_KEYS.CONSULTAS, merged);
+        return merged;
+      }
       return rows;
     }
   } catch (err) {
@@ -570,7 +628,7 @@ export async function createConsulta(sql, consultaData) {
           paciente_id, data_consulta, peso, cintura, quadril,
           percentual_gordura, observacoes, proximo_retorno
         ) VALUES (
-          ${targetPacienteId}, ${dataConsulta}, ${peso},
+          ${targetPacienteId}::uuid, ${dataConsulta}, ${peso},
           ${cintura}, ${quadril}, ${gordura},
           ${obs}, ${proxRetorno}
         ) RETURNING *
@@ -623,7 +681,7 @@ export async function updateConsulta(sql, consultaId, consultaData) {
           percentual_gordura = ${gordura},
           observacoes = ${obs},
           proximo_retorno = ${proxRetorno}
-        WHERE id = ${consultaId}
+        WHERE id = ${consultaId}::uuid
         RETURNING *
       `;
       if (res && res[0]) {
@@ -649,7 +707,7 @@ export async function deleteConsulta(sql, consultaId) {
 
   if (sql) {
     try {
-      await sql`DELETE FROM consultas WHERE id = ${consultaId}`;
+      await sql`DELETE FROM consultas WHERE id = ${consultaId}::uuid`;
       console.log('Consulta excluída com sucesso do Neon DB:', consultaId);
     } catch (err) {
       console.error('Erro ao excluir consulta no Neon:', err.message);
@@ -670,7 +728,13 @@ export async function getPlanosAlimentares(sql, pacienteId = null) {
 
   try {
     let rows;
-    if (pacienteId) {
+    const isUUID = pacienteId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(pacienteId);
+
+    if (isUUID) {
+      rows = await sql`
+        SELECT * FROM planos_alimentares WHERE paciente_id = ${pacienteId}::uuid ORDER BY created_at DESC
+      `;
+    } else if (pacienteId) {
       rows = await sql`
         SELECT * FROM planos_alimentares WHERE paciente_id = ${pacienteId} ORDER BY created_at DESC
       `;
@@ -682,8 +746,15 @@ export async function getPlanosAlimentares(sql, pacienteId = null) {
         ORDER BY pl.created_at DESC
       `;
     }
+
     if (rows) {
-      if (!pacienteId) setLocalData(STORAGE_KEYS.PLANOS, rows);
+      if (!pacienteId) {
+        const rowIds = new Set(rows.map(r => String(r.id)));
+        const unsynced = local.filter(p => !rowIds.has(String(p.id)) && (!p.id || p.id.startsWith('pln_')));
+        const merged = [...rows, ...unsynced];
+        setLocalData(STORAGE_KEYS.PLANOS, merged);
+        return merged;
+      }
       return rows;
     }
   } catch (err) {
@@ -714,7 +785,7 @@ export async function createPlanoAlimentar(sql, planoData) {
         INSERT INTO planos_alimentares (
           paciente_id, titulo, conteudo
         ) VALUES (
-          ${planoData.paciente_id}, ${planoData.titulo || 'Plano Alimentar'}, ${conteudoJson}::jsonb
+          ${planoData.paciente_id}::uuid, ${planoData.titulo || 'Plano Alimentar'}, ${conteudoJson}::jsonb
         ) RETURNING *
       `;
       if (inserted && inserted[0]) {
@@ -725,6 +796,7 @@ export async function createPlanoAlimentar(sql, planoData) {
       }
     } catch (err) {
       console.warn('Erro ao inserir plano alimentar no Neon:', err.message);
+      throw err;
     }
   }
 
@@ -743,10 +815,11 @@ export async function updatePlanoAlimentar(sql, planoId, planoData) {
         UPDATE planos_alimentares SET
           titulo = ${planoData.titulo || 'Plano Alimentar'},
           conteudo = ${conteudoJson}::jsonb
-        WHERE id = ${planoId}
+        WHERE id = ${planoId}::uuid
       `;
     } catch (err) {
       console.warn('Erro ao atualizar plano alimentar no Neon:', err.message);
+      throw err;
     }
   }
   return { id: planoId, ...planoData };
@@ -758,7 +831,7 @@ export async function deletePlanoAlimentar(sql, planoId) {
 
   if (sql) {
     try {
-      await sql`DELETE FROM planos_alimentares WHERE id = ${planoId}`;
+      await sql`DELETE FROM planos_alimentares WHERE id = ${planoId}::uuid`;
     } catch (err) {
       console.warn('Erro ao excluir plano alimentar no Neon:', err.message);
     }

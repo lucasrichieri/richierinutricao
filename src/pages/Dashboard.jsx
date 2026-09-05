@@ -134,15 +134,22 @@ export default function Dashboard() {
 
       const nutId = perfil?.id || session.user.id;
 
-      // 2. Carrega Pacientes do Nutricionista logado em tempo real do Neon DB
+      // 2. Sincroniza preventivamente dados locais para o Neon DB
+      try {
+        await syncLocalPacientesToNeon(sql, nutId);
+      } catch (syncErr) {
+        console.warn('Aviso na sincronização prévia de pacientes:', syncErr);
+      }
+
+      // 3. Carrega Pacientes do Nutricionista logado em tempo real do Neon DB
       const pacs = await getPacientes(sql, nutId);
       setPatients(pacs || []);
 
-      // 3. Carrega Consultas do Neon
+      // 4. Carrega Consultas do Neon
       const cons = await getConsultas(sql);
       setConsultations(cons || []);
 
-      // 4. Carrega Planos Alimentares
+      // 5. Carrega Planos Alimentares
       const plans = await getPlanosAlimentares(sql);
       setMealPlans(plans || []);
     } catch (err) {
