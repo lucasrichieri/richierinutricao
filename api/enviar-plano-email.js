@@ -1,4 +1,34 @@
 import nodemailer from 'nodemailer';
+import fs from 'fs';
+import path from 'path';
+
+// Função auxiliar para buscar variáveis do process.env ou diretamente do .env no disco
+function getEnvVar(key, defaultValue = '') {
+  if (process.env[key] && process.env[key].trim()) {
+    return process.env[key].trim();
+  }
+  try {
+    const envPath = path.resolve(process.cwd(), '.env');
+    if (fs.existsSync(envPath)) {
+      const content = fs.readFileSync(envPath, 'utf8');
+      const lines = content.split(/\r?\n/);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+          const firstEqual = trimmed.indexOf('=');
+          const k = trimmed.substring(0, firstEqual).trim();
+          const v = trimmed.substring(firstEqual + 1).trim();
+          if (k === key) {
+            return v.replace(/^["']|["']$/g, '').trim();
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`Não foi possível ler .env no disco para chave ${key}:`, err.message);
+  }
+  return defaultValue;
+}
 
 export default async function handler(req, res) {
   // Configurações de CORS
@@ -36,13 +66,13 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Arquivo PDF não fornecido.' });
     }
 
-    // Configuração de Credenciais SMTP com .trim()
-    const smtpHost = (process.env.SMTP_HOST || 'smtp.gmail.com').trim();
-    const smtpPort = parseInt((process.env.SMTP_PORT || '465').toString().trim(), 10);
+    // Configuração de Credenciais SMTP com suporte a fallback de leitura do .env
+    const smtpHost = getEnvVar('SMTP_HOST', 'smtp.gmail.com');
+    const smtpPort = parseInt(getEnvVar('SMTP_PORT', '465'), 10);
     const smtpSecure = smtpPort === 465;
-    const smtpUser = (process.env.SMTP_USER || process.env.GMAIL_USER || process.env.EMAIL_USER || '').trim();
-    const smtpPass = (process.env.SMTP_PASS || process.env.GMAIL_PASS || process.env.EMAIL_PASS || '').trim();
-    const emailFrom = (process.env.SMTP_FROM || process.env.EMAIL_FROM || smtpUser || 'contato@richierinutricao.com.br').trim();
+    const smtpUser = getEnvVar('SMTP_USER') || getEnvVar('GMAIL_USER') || getEnvVar('EMAIL_USER');
+    const smtpPass = getEnvVar('SMTP_PASS') || getEnvVar('GMAIL_PASS') || getEnvVar('EMAIL_PASS');
+    const emailFrom = getEnvVar('SMTP_FROM') || getEnvVar('EMAIL_FROM') || smtpUser || 'contato@richierinutricao.com.br';
 
     // Se as credenciais SMTP não estiverem preenchidas no .env
     if (!smtpUser || !smtpPass) {
