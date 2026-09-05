@@ -1,4 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import html2pdf from 'html2pdf.js';
+
+const REFEICOES_ORDEM = ['cafe_da_manha', 'lanche_manha', 'almoco', 'lanche_tarde', 'jantar'];
 
 const REFEICOES_LABELS = {
   cafe_da_manha: { label: '☕ Café da Manhã', color: '#B45309' },
@@ -16,6 +19,8 @@ export default function MealPlanPrintView({
   nutritionist,
 }) {
   const [selectedDayTab, setSelectedDayTab] = useState('todos'); // 'todos' | dia
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const printAreaRef = useRef(null);
 
   if (!isOpen || !plan) return null;
 
@@ -23,8 +28,46 @@ export default function MealPlanPrintView({
   const planoSemanal = Array.isArray(conteudo?.plano_semanal) ? conteudo.plano_semanal : null;
   const refeicoesLegadas = Array.isArray(conteudo?.refeicoes) ? conteudo.refeicoes : [];
 
+  // Impressão nativa do navegador
   const handlePrint = () => {
     window.print();
+  };
+
+  // Geração e download direto do arquivo .PDF no computador
+  const handleDownloadPDF = async () => {
+    if (!printAreaRef.current) return;
+
+    setIsDownloadingPdf(true);
+    try {
+      const patientName = (patient?.nome || 'Paciente')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9 ]/g, '')
+        .trim()
+        .replace(/\s+/g, '_');
+      const filename = `Plano_Alimentar_${patientName}.pdf`;
+
+      const opt = {
+        margin: [6, 8, 6, 8], // mm
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          scrollY: 0,
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+      };
+
+      await html2pdf().set(opt).from(printAreaRef.current).save();
+    } catch (err) {
+      console.error('Erro ao gerar arquivo PDF:', err);
+      alert('Ocorreu um erro ao baixar o PDF. Você também pode clicar em "Imprimir" e selecionar "Salvar como PDF".');
+    } finally {
+      setIsDownloadingPdf(false);
+    }
   };
 
   const daysToRender = planoSemanal
@@ -38,23 +81,46 @@ export default function MealPlanPrintView({
       <div
         className="modal-content large print-page"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: '960px', width: '95vw', background: '#FFFFFF', maxHeight: '94vh', overflowY: 'auto' }}
+        style={{ maxWidth: '980px', width: '95vw', background: '#FFFFFF', maxHeight: '94vh', display: 'flex', flexDirection: 'column' }}
       >
-        <div className="modal-header no-print" style={{ borderBottom: '1px solid #E2E8F0', padding: '1rem 1.5rem' }}>
+        {/* Header do Modal */}
+        <div className="modal-header no-print" style={{ borderBottom: '1px solid #E2E8F0', padding: '1rem 1.5rem', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <span style={{ fontSize: '1.4rem' }}>🖨️</span>
+            <span style={{ fontSize: '1.4rem' }}>📄</span>
             <div>
               <h2 className="modal-title" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0F172A' }}>
-                Visualização & Impressão do Plano Alimentar
+                Visualização & Exportação em PDF
               </h2>
               <span style={{ fontSize: '0.8rem', color: '#64748B' }}>
-                Formato profissional formatado para PDF / Impressão
+                Baixe o arquivo PDF pronto para envio ao paciente ou imprima diretamente
               </span>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <button className="btn btn-primary btn-sm" onClick={handlePrint} style={{ fontWeight: 700 }}>
-              🖨️ Imprimir / Salvar PDF
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleDownloadPDF}
+              disabled={isDownloadingPdf}
+              style={{
+                fontWeight: 800,
+                background: 'linear-gradient(135deg, #15803D 0%, #047857 100%)',
+                boxShadow: '0 2px 8px rgba(21, 128, 61, 0.25)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+              }}
+            >
+              {isDownloadingPdf ? (
+                <>
+                  <span className="spinner" style={{ width: '14px', height: '14px', border: '2px solid #FFF', borderTopColor: 'transparent' }}></span>
+                  Gerando PDF...
+                </>
+              ) : (
+                <>📥 Baixar Arquivo PDF</>
+              )}
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={handlePrint} style={{ fontWeight: 600 }}>
+              🖨️ Imprimir
             </button>
             <button className="modal-close-btn" onClick={onClose} style={{ fontSize: '1.4rem' }}>
               &times;
@@ -74,6 +140,7 @@ export default function MealPlanPrintView({
               gap: '0.4rem',
               overflowX: 'auto',
               alignItems: 'center',
+              flexShrink: 0,
             }}
           >
             <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', marginRight: '0.35rem' }}>
@@ -118,8 +185,19 @@ export default function MealPlanPrintView({
           </div>
         )}
 
-        <div className="modal-body" style={{ padding: '2rem 2.5rem', background: '#FFFFFF' }}>
-          {/* Cabeçalho do Documento */}
+        {/* Corpo Imprimível e Exportável para PDF */}
+        <div
+          ref={printAreaRef}
+          id="meal-plan-printable-document"
+          className="modal-body"
+          style={{
+            padding: '2rem 2.5rem',
+            background: '#FFFFFF',
+            flex: 1,
+            overflowY: 'auto',
+          }}
+        >
+          {/* Cabeçalho Oficial do Documento */}
           <div
             style={{
               display: 'flex',
@@ -207,7 +285,7 @@ export default function MealPlanPrintView({
             </div>
           </div>
 
-          {/* RENDERIZAÇÃO DO PLANO SEMANAL (7 DIAS) */}
+          {/* RENDERIZAÇÃO DO PLANO SEMANAL (7 DIAS COM 5 REFEIÇÕES NA ORDEM CORRETA) */}
           {planoSemanal && daysToRender.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
               {daysToRender.map((diaObj, dIdx) => (
@@ -241,11 +319,13 @@ export default function MealPlanPrintView({
                     </span>
                   </div>
 
-                  {/* Refeições do Dia */}
+                  {/* Refeições do Dia na ordem cronológica */}
                   <div style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {Object.entries(diaObj.refeicoes || {}).map(([refKey, opcoes]) => {
+                    {REFEICOES_ORDEM.map((refKey) => {
                       const refInfo = REFEICOES_LABELS[refKey] || { label: refKey, color: '#334155' };
-                      const opcoesList = Array.isArray(opcoes) ? opcoes : [];
+                      const opcoesList = Array.isArray(diaObj.refeicoes?.[refKey]) ? diaObj.refeicoes[refKey] : [];
+
+                      if (opcoesList.length === 0) return null;
 
                       return (
                         <div
@@ -426,6 +506,7 @@ export default function MealPlanPrintView({
           </div>
         </div>
 
+        {/* Footer do Modal */}
         <div
           className="modal-footer no-print"
           style={{
@@ -435,14 +516,39 @@ export default function MealPlanPrintView({
             padding: '1rem 1.5rem',
             borderTop: '1px solid #E2E8F0',
             backgroundColor: '#F8FAFC',
+            flexShrink: 0,
           }}
         >
           <button className="btn btn-secondary" onClick={onClose}>
             Fechar
           </button>
-          <button className="btn btn-primary" onClick={handlePrint} style={{ fontWeight: 800 }}>
-            🖨️ Imprimir / Salvar em PDF
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              className="btn btn-primary"
+              onClick={handleDownloadPDF}
+              disabled={isDownloadingPdf}
+              style={{
+                fontWeight: 800,
+                background: 'linear-gradient(135deg, #15803D 0%, #047857 100%)',
+                boxShadow: '0 2px 8px rgba(21, 128, 61, 0.25)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+              }}
+            >
+              {isDownloadingPdf ? (
+                <>
+                  <span className="spinner" style={{ width: '14px', height: '14px', border: '2px solid #FFF', borderTopColor: 'transparent' }}></span>
+                  Gerando PDF...
+                </>
+              ) : (
+                <>📥 Baixar Arquivo PDF no PC</>
+              )}
+            </button>
+            <button className="btn btn-secondary" onClick={handlePrint} style={{ fontWeight: 600 }}>
+              🖨️ Imprimir
+            </button>
+          </div>
         </div>
       </div>
     </div>
