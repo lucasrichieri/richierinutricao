@@ -271,36 +271,52 @@ export async function syncLocalPacientesToNeon(sql, nutricionistaId = null) {
       if (!existing || existing.length === 0) {
         const peso = p.peso_inicial && !isNaN(parseFloat(p.peso_inicial)) ? parseFloat(p.peso_inicial) : null;
         const alt = p.altura && !isNaN(parseFloat(p.altura)) ? parseFloat(p.altura) : null;
-        const mef = p.refeicoes_por_dia ? parseInt(p.refeicoes_por_dia, 10) : null;
-        const agua = p.litros_agua ? parseFloat(p.litros_agua) : null;
+        const mef = p.refeicoes_por_dia && !isNaN(parseInt(p.refeicoes_por_dia, 10)) ? parseInt(p.refeicoes_por_dia, 10) : null;
+        const agua = p.litros_agua && !isNaN(parseFloat(p.litros_agua)) ? parseFloat(p.litros_agua) : null;
+        const dataNascimento = p.data_nascimento && String(p.data_nascimento).trim() ? String(p.data_nascimento).trim() : null;
+        const obs = p.observacoes && String(p.observacoes).trim() ? String(p.observacoes).trim() : null;
+        const atvDesc = p.atividade_fisica_descricao && String(p.atividade_fisica_descricao).trim() ? String(p.atividade_fisica_descricao).trim() : null;
+        const objTexto = p.objetivo_texto && String(p.objetivo_texto).trim() ? String(p.objetivo_texto).trim() : null;
+        const nivelAtiv = p.nivel_atividade && String(p.nivel_atividade).trim() ? String(p.nivel_atividade).trim() : null;
+        const med = p.medicamentos && String(p.medicamentos).trim() ? String(p.medicamentos).trim() : null;
+        const sup = p.suplementos && String(p.suplementos).trim() ? String(p.suplementos).trim() : null;
+        const horAcorda = p.horario_acorda && String(p.horario_acorda).trim() ? String(p.horario_acorda).trim() : null;
+        const horDorme = p.horario_dorme && String(p.horario_dorme).trim() ? String(p.horario_dorme).trim() : null;
+        const wpp = p.whatsapp || p.telefone ? String(p.whatsapp || p.telefone).trim() : null;
+        const em = p.email && String(p.email).trim() ? String(p.email).trim() : null;
+        const sx = p.sexo && String(p.sexo).trim() ? String(p.sexo).trim() : null;
+
         const objs = Array.isArray(p.objetivos) ? p.objetivos : [];
         const pat = Array.isArray(p.patologias) ? p.patologias : [];
         const rest = Array.isArray(p.restricoes_alimentares) ? p.restricoes_alimentares : [];
         const alerg = Array.isArray(p.alergias) ? p.alergias : [];
         const nutIdParam = nutricionistaId || (isUUID && p.nutricionista_id ? p.nutricionista_id : null);
-
         const isNutUUID = nutIdParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(nutIdParam);
 
-        const inserted = await sql`
-          INSERT INTO pacientes (
-            nutricionista_id, nome, data_nascimento, sexo, whatsapp, email,
-            peso_inicial, altura, objetivos, objetivo_texto,
-            nivel_atividade, patologias, restricoes_alimentares, alergias,
-            medicamentos, suplementos, refeicoes_por_dia, horario_acorda,
-            horario_dorme, litros_agua, atividade_fisica, atividade_fisica_descricao, observacoes
-          ) VALUES (
-            ${isNutUUID ? String(nutIdParam) : null}::uuid, ${p.nome.trim()}, ${p.data_nascimento || null}, ${p.sexo || null},
-            ${p.whatsapp || p.telefone || null}, ${p.email || null}, ${peso},
-            ${alt}, ${objs}, ${p.objetivo_texto || null},
-            ${p.nivel_atividade || null}, ${pat}, ${rest},
-            ${alerg}, ${p.medicamentos || null}, ${p.suplementos || null},
-            ${mef}, ${p.horario_acorda || null}, ${p.horario_dorme || null},
-            ${agua}, ${Boolean(p.atividade_fisica)}, ${p.atividade_fisica_descricao || null},
-            ${p.observacoes || null}
-          ) RETURNING *
-        `;
-        if (inserted && inserted[0]) {
-          console.log('Paciente do cache sincronizado com sucesso para o Neon DB:', inserted[0].nome);
+        try {
+          const inserted = await sql`
+            INSERT INTO pacientes (
+              nutricionista_id, nome, data_nascimento, sexo, whatsapp, email,
+              peso_inicial, altura, objetivos, objetivo_texto,
+              nivel_atividade, patologias, restricoes_alimentares, alergias,
+              medicamentos, suplementos, refeicoes_por_dia, horario_acorda,
+              horario_dorme, litros_agua, atividade_fisica, atividade_fisica_descricao, observacoes
+            ) VALUES (
+              ${isNutUUID ? String(nutIdParam) : null}::uuid, ${p.nome.trim()}, ${dataNascimento}, ${sx},
+              ${wpp}, ${em}, ${peso},
+              ${alt}, ${objs}, ${objTexto},
+              ${nivelAtiv}, ${pat}, ${rest},
+              ${alerg}, ${med}, ${sup},
+              ${mef}, ${horAcorda}, ${horDorme},
+              ${agua}, ${Boolean(p.atividade_fisica)}, ${atvDesc},
+              ${obs}
+            ) RETURNING *
+          `;
+          if (inserted && inserted[0]) {
+            console.log('Paciente do cache sincronizado com sucesso para o Neon DB:', inserted[0].nome);
+          }
+        } catch (insertErr) {
+          console.warn('Erro ao sincronizar paciente individual:', insertErr.message);
         }
       }
     }
@@ -316,20 +332,20 @@ export async function createPaciente(sql, pacienteData, nutricionistaId = null) 
   // Tratamento dos tipos para inserção segura no PostgreSQL
   const peso = pacienteData.peso_inicial && !isNaN(parseFloat(pacienteData.peso_inicial)) ? parseFloat(pacienteData.peso_inicial) : null;
   const alt = pacienteData.altura && !isNaN(parseFloat(pacienteData.altura)) ? parseFloat(pacienteData.altura) : null;
-  const mef = pacienteData.refeicoes_por_dia ? parseInt(pacienteData.refeicoes_por_dia, 10) : null;
-  const agua = pacienteData.litros_agua ? parseFloat(pacienteData.litros_agua) : null;
-  const dataNascimento = pacienteData.data_nascimento || null;
-  const obs = pacienteData.observacoes || null;
-  const atvDesc = pacienteData.atividade_fisica_descricao || null;
-  const objTexto = pacienteData.objetivo_texto || null;
-  const nivelAtiv = pacienteData.nivel_atividade || null;
-  const med = pacienteData.medicamentos || null;
-  const sup = pacienteData.suplementos || null;
-  const horAcorda = pacienteData.horario_acorda || null;
-  const horDorme = pacienteData.horario_dorme || null;
-  const wpp = pacienteData.whatsapp || pacienteData.telefone || null;
-  const em = pacienteData.email || null;
-  const sx = pacienteData.sexo || null;
+  const mef = pacienteData.refeicoes_por_dia && !isNaN(parseInt(pacienteData.refeicoes_por_dia, 10)) ? parseInt(pacienteData.refeicoes_por_dia, 10) : null;
+  const agua = pacienteData.litros_agua && !isNaN(parseFloat(pacienteData.litros_agua)) ? parseFloat(pacienteData.litros_agua) : null;
+  const dataNascimento = pacienteData.data_nascimento && String(pacienteData.data_nascimento).trim() ? String(pacienteData.data_nascimento).trim() : null;
+  const obs = pacienteData.observacoes && String(pacienteData.observacoes).trim() ? String(pacienteData.observacoes).trim() : null;
+  const atvDesc = pacienteData.atividade_fisica_descricao && String(pacienteData.atividade_fisica_descricao).trim() ? String(pacienteData.atividade_fisica_descricao).trim() : null;
+  const objTexto = pacienteData.objetivo_texto && String(pacienteData.objetivo_texto).trim() ? String(pacienteData.objetivo_texto).trim() : null;
+  const nivelAtiv = pacienteData.nivel_atividade && String(pacienteData.nivel_atividade).trim() ? String(pacienteData.nivel_atividade).trim() : null;
+  const med = pacienteData.medicamentos && String(pacienteData.medicamentos).trim() ? String(pacienteData.medicamentos).trim() : null;
+  const sup = pacienteData.suplementos && String(pacienteData.suplementos).trim() ? String(pacienteData.suplementos).trim() : null;
+  const horAcorda = pacienteData.horario_acorda && String(pacienteData.horario_acorda).trim() ? String(pacienteData.horario_acorda).trim() : null;
+  const horDorme = pacienteData.horario_dorme && String(pacienteData.horario_dorme).trim() ? String(pacienteData.horario_dorme).trim() : null;
+  const wpp = pacienteData.whatsapp || pacienteData.telefone ? String(pacienteData.whatsapp || pacienteData.telefone).trim() : null;
+  const em = pacienteData.email && String(pacienteData.email).trim() ? String(pacienteData.email).trim() : null;
+  const sx = pacienteData.sexo && String(pacienteData.sexo).trim() ? String(pacienteData.sexo).trim() : null;
 
   const objs = Array.isArray(pacienteData.objetivos) ? pacienteData.objetivos : [];
   const pat = Array.isArray(pacienteData.patologias) ? pacienteData.patologias : [];
@@ -344,6 +360,18 @@ export async function createPaciente(sql, pacienteData, nutricionistaId = null) 
     altura: alt,
     refeicoes_por_dia: mef,
     litros_agua: agua,
+    data_nascimento: dataNascimento,
+    observacoes: obs,
+    atividade_fisica_descricao: atvDesc,
+    objetivo_texto: objTexto,
+    nivel_atividade: nivelAtiv,
+    medicamentos: med,
+    suplementos: sup,
+    horario_acorda: horAcorda,
+    horario_dorme: horDorme,
+    whatsapp: wpp,
+    email: em,
+    sexo: sx,
     objetivos: objs,
     patologias: pat,
     restricoes_alimentares: rest,
@@ -387,6 +415,37 @@ export async function createPaciente(sql, pacienteData, nutricionistaId = null) 
       }
     } catch (err) {
       console.error('Erro ao inserir paciente no Neon DB:', err);
+      // Se falhar a inserção no banco por FK de nutricionista_id, tenta com NULL
+      if (err.message && err.message.includes('foreign key constraint')) {
+        try {
+          const insertedWithoutNut = await sql`
+            INSERT INTO pacientes (
+              nutricionista_id, nome, data_nascimento, sexo, whatsapp, email,
+              peso_inicial, altura, objetivos, objetivo_texto,
+              nivel_atividade, patologias, restricoes_alimentares, alergias,
+              medicamentos, suplementos, refeicoes_por_dia, horario_acorda,
+              horario_dorme, litros_agua, atividade_fisica, atividade_fisica_descricao, observacoes
+            ) VALUES (
+              NULL, ${pacienteData.nome.trim()}, ${dataNascimento}, ${sx},
+              ${wpp}, ${em}, ${peso},
+              ${alt}, ${objs}, ${objTexto},
+              ${nivelAtiv}, ${pat}, ${rest},
+              ${alerg}, ${med}, ${sup},
+              ${mef}, ${horAcorda}, ${horDorme},
+              ${agua}, ${Boolean(pacienteData.atividade_fisica)}, ${atvDesc},
+              ${obs}
+            ) RETURNING *
+          `;
+          if (insertedWithoutNut && insertedWithoutNut[0]) {
+            const finalPatient = insertedWithoutNut[0];
+            const syncList = updated.map(p => (p.id === id ? finalPatient : p));
+            setLocalData(STORAGE_KEYS.PACIENTES, syncList);
+            return finalPatient;
+          }
+        } catch (secondErr) {
+          console.error('Erro no fallback de inserção de paciente:', secondErr);
+        }
+      }
       throw err;
     }
   }
@@ -397,20 +456,20 @@ export async function createPaciente(sql, pacienteData, nutricionistaId = null) 
 export async function updatePaciente(sql, pacienteId, pacienteData) {
   const peso = pacienteData.peso_inicial && !isNaN(parseFloat(pacienteData.peso_inicial)) ? parseFloat(pacienteData.peso_inicial) : null;
   const alt = pacienteData.altura && !isNaN(parseFloat(pacienteData.altura)) ? parseFloat(pacienteData.altura) : null;
-  const mef = pacienteData.refeicoes_por_dia ? parseInt(pacienteData.refeicoes_por_dia, 10) : null;
-  const agua = pacienteData.litros_agua ? parseFloat(pacienteData.litros_agua) : null;
-  const dataNascimento = pacienteData.data_nascimento || null;
-  const obs = pacienteData.observacoes || null;
-  const atvDesc = pacienteData.atividade_fisica_descricao || null;
-  const objTexto = pacienteData.objetivo_texto || null;
-  const nivelAtiv = pacienteData.nivel_atividade || null;
-  const med = pacienteData.medicamentos || null;
-  const sup = pacienteData.suplementos || null;
-  const horAcorda = pacienteData.horario_acorda || null;
-  const horDorme = pacienteData.horario_dorme || null;
-  const wpp = pacienteData.whatsapp || pacienteData.telefone || null;
-  const em = pacienteData.email || null;
-  const sx = pacienteData.sexo || null;
+  const mef = pacienteData.refeicoes_por_dia && !isNaN(parseInt(pacienteData.refeicoes_por_dia, 10)) ? parseInt(pacienteData.refeicoes_por_dia, 10) : null;
+  const agua = pacienteData.litros_agua && !isNaN(parseFloat(pacienteData.litros_agua)) ? parseFloat(pacienteData.litros_agua) : null;
+  const dataNascimento = pacienteData.data_nascimento && String(pacienteData.data_nascimento).trim() ? String(pacienteData.data_nascimento).trim() : null;
+  const obs = pacienteData.observacoes && String(pacienteData.observacoes).trim() ? String(pacienteData.observacoes).trim() : null;
+  const atvDesc = pacienteData.atividade_fisica_descricao && String(pacienteData.atividade_fisica_descricao).trim() ? String(pacienteData.atividade_fisica_descricao).trim() : null;
+  const objTexto = pacienteData.objetivo_texto && String(pacienteData.objetivo_texto).trim() ? String(pacienteData.objetivo_texto).trim() : null;
+  const nivelAtiv = pacienteData.nivel_atividade && String(pacienteData.nivel_atividade).trim() ? String(pacienteData.nivel_atividade).trim() : null;
+  const med = pacienteData.medicamentos && String(pacienteData.medicamentos).trim() ? String(pacienteData.medicamentos).trim() : null;
+  const sup = pacienteData.suplementos && String(pacienteData.suplementos).trim() ? String(pacienteData.suplementos).trim() : null;
+  const horAcorda = pacienteData.horario_acorda && String(pacienteData.horario_acorda).trim() ? String(pacienteData.horario_acorda).trim() : null;
+  const horDorme = pacienteData.horario_dorme && String(pacienteData.horario_dorme).trim() ? String(pacienteData.horario_dorme).trim() : null;
+  const wpp = pacienteData.whatsapp || pacienteData.telefone ? String(pacienteData.whatsapp || pacienteData.telefone).trim() : null;
+  const em = pacienteData.email && String(pacienteData.email).trim() ? String(pacienteData.email).trim() : null;
+  const sx = pacienteData.sexo && String(pacienteData.sexo).trim() ? String(pacienteData.sexo).trim() : null;
 
   const objs = Array.isArray(pacienteData.objetivos) ? pacienteData.objetivos : [];
   const pat = Array.isArray(pacienteData.patologias) ? pacienteData.patologias : [];
@@ -424,6 +483,18 @@ export async function updatePaciente(sql, pacienteId, pacienteData) {
     altura: alt,
     refeicoes_por_dia: mef,
     litros_agua: agua,
+    data_nascimento: dataNascimento,
+    observacoes: obs,
+    atividade_fisica_descricao: atvDesc,
+    objetivo_texto: objTexto,
+    nivel_atividade: nivelAtiv,
+    medicamentos: med,
+    suplementos: sup,
+    horario_acorda: horAcorda,
+    horario_dorme: horDorme,
+    whatsapp: wpp,
+    email: em,
+    sexo: sx,
     objetivos: objs,
     patologias: pat,
     restricoes_alimentares: rest,
