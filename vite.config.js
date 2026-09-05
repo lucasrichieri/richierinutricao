@@ -12,6 +12,10 @@ function serverlessApiPlugin() {
         const isEnviarEmail = req.url === '/api/enviar-plano-email' || req.url.startsWith('/api/enviar-plano-email');
 
         if (isGerarPlano || isEnviarEmail) {
+          // Atualiza as variáveis do .env dinamicamente
+          const currentEnv = loadEnv(process.env.NODE_ENV || 'development', process.cwd(), '');
+          Object.assign(process.env, currentEnv);
+
           let body = '';
           req.on('data', (chunk) => {
             body += chunk;

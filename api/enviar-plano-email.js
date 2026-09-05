@@ -36,13 +36,13 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Arquivo PDF não fornecido.' });
     }
 
-    // Configuração de Credenciais SMTP (Gmail, Outlook, Amazon SES, Brevo, Mailgun, etc.)
-    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
+    // Configuração de Credenciais SMTP com .trim()
+    const smtpHost = (process.env.SMTP_HOST || 'smtp.gmail.com').trim();
+    const smtpPort = parseInt((process.env.SMTP_PORT || '465').toString().trim(), 10);
     const smtpSecure = smtpPort === 465;
-    const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER || process.env.EMAIL_USER || '';
-    const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_PASS || process.env.EMAIL_PASS || '';
-    const emailFrom = process.env.SMTP_FROM || process.env.EMAIL_FROM || smtpUser || 'contato@richierinutricao.com.br';
+    const smtpUser = (process.env.SMTP_USER || process.env.GMAIL_USER || process.env.EMAIL_USER || '').trim();
+    const smtpPass = (process.env.SMTP_PASS || process.env.GMAIL_PASS || process.env.EMAIL_PASS || '').trim();
+    const emailFrom = (process.env.SMTP_FROM || process.env.EMAIL_FROM || smtpUser || 'contato@richierinutricao.com.br').trim();
 
     // Se as credenciais SMTP não estiverem preenchidas no .env
     if (!smtpUser || !smtpPass) {
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
         success: false,
         requiresConfig: true,
         mensagem:
-          'Para enviar o e-mail diretamente pelo sistema, configure SMTP_USER e SMTP_PASS no arquivo .env ou use o cliente de e-mail local.',
+          'Para enviar o e-mail diretamente pelo sistema, configure SMTP_USER e SMTP_PASS no arquivo .env.',
       });
     }
 
@@ -127,6 +127,26 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error('Erro ao enviar e-mail com plano alimentar:', error);
+
+    const errorMessage = error.message || '';
+    const errorResponse = error.response || '';
+
+    if (errorMessage.includes('Application-specific password required') || errorResponse.includes('534')) {
+      return res.status(400).json({
+        success: false,
+        error: 'O Gmail requer uma "Senha de Aplicativo" de 16 caracteres (não a sua senha pessoal normal).',
+        detalhes: 'Acesse sua Conta Google > Segurança > Verificação em duas etapas > Senhas de app, gere uma senha e cole no SMTP_PASS do arquivo .env.',
+      });
+    }
+
+    if (errorMessage.includes('Username and Password not accepted') || errorResponse.includes('535')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Credenciais de e-mail inválidas ou não aceitas pelo servidor SMTP.',
+        detalhes: 'Verifique se o e-mail e a Senha de Aplicativo no arquivo .env estão corretos.',
+      });
+    }
+
     return res.status(500).json({
       success: false,
       error: 'Falha ao enviar e-mail.',
