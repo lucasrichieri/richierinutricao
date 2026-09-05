@@ -56,6 +56,11 @@ export default async function handler(req, res) {
       mensagemPersonalizada = '',
       pdfBase64,
       nutricionistaNome = 'Richieri Nutrição',
+      smtpUser: bodySmtpUser,
+      smtpPass: bodySmtpPass,
+      smtpHost: bodySmtpHost,
+      smtpPort: bodySmtpPort,
+      smtpFrom: bodySmtpFrom,
     } = req.body || {};
 
     if (!destinatarioEmail || !destinatarioEmail.includes('@')) {
@@ -66,17 +71,17 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Arquivo PDF não fornecido.' });
     }
 
-    // Configuração de Credenciais SMTP com suporte a fallback de leitura do .env
-    const smtpHost = getEnvVar('SMTP_HOST', 'smtp.gmail.com');
-    const smtpPort = parseInt(getEnvVar('SMTP_PORT', '465'), 10);
+    // Configuração de Credenciais SMTP (Req Body > VITE_SMTP > SMTP > Fallbacks)
+    const smtpHost = (bodySmtpHost || getEnvVar('VITE_SMTP_HOST') || getEnvVar('SMTP_HOST') || 'smtp.gmail.com').trim();
+    const smtpPort = parseInt((bodySmtpPort || getEnvVar('VITE_SMTP_PORT') || getEnvVar('SMTP_PORT') || '465').toString().trim(), 10);
     const smtpSecure = smtpPort === 465;
-    const smtpUser = getEnvVar('SMTP_USER') || getEnvVar('GMAIL_USER') || getEnvVar('EMAIL_USER');
-    const smtpPass = getEnvVar('SMTP_PASS') || getEnvVar('GMAIL_PASS') || getEnvVar('EMAIL_PASS');
-    const emailFrom = getEnvVar('SMTP_FROM') || getEnvVar('EMAIL_FROM') || smtpUser || 'contato@richierinutricao.com.br';
+    const smtpUser = (bodySmtpUser || getEnvVar('VITE_SMTP_USER') || getEnvVar('SMTP_USER') || getEnvVar('GMAIL_USER') || getEnvVar('EMAIL_USER') || '').trim();
+    const smtpPass = (bodySmtpPass || getEnvVar('VITE_SMTP_PASS') || getEnvVar('SMTP_PASS') || getEnvVar('GMAIL_PASS') || getEnvVar('EMAIL_PASS') || '').trim();
+    const emailFrom = (bodySmtpFrom || getEnvVar('VITE_SMTP_FROM') || getEnvVar('SMTP_FROM') || getEnvVar('EMAIL_FROM') || smtpUser || 'contato@richierinutricao.com.br').trim();
 
-    // Se as credenciais SMTP não estiverem preenchidas no .env
+    // Se as credenciais SMTP não estiverem preenchidas
     if (!smtpUser || !smtpPass) {
-      console.warn('Credenciais SMTP (SMTP_USER e SMTP_PASS) não configuradas no .env.');
+      console.warn('Credenciais SMTP (SMTP_USER e SMTP_PASS) não configuradas.');
       return res.status(200).json({
         success: false,
         requiresConfig: true,

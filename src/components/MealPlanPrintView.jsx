@@ -157,6 +157,11 @@ export default function MealPlanPrintView({
           mensagemPersonalizada: mensagemEmail,
           pdfBase64: pdfBase64,
           nutricionistaNome: nutritionist?.nome || 'Richieri Nutrição',
+          smtpUser: import.meta.env.VITE_SMTP_USER || '',
+          smtpPass: import.meta.env.VITE_SMTP_PASS || '',
+          smtpHost: import.meta.env.VITE_SMTP_HOST || '',
+          smtpPort: import.meta.env.VITE_SMTP_PORT || '',
+          smtpFrom: import.meta.env.VITE_SMTP_FROM || '',
         }),
       });
 
